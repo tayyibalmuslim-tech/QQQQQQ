@@ -584,8 +584,13 @@ function renderLiveCheckBox(){
     html.push(`<span class="word-hint">${displayHint}</span>` + verseMarkerAfter(activeQuiz.hintWordIndex));
   }
 
+  // نضيف فراغ وهمي بارتفاع نص الصندوق بعد آخر كلمة، فلما المتصفح يعمل سكرول لآخر نقطة (سلوكه الطبيعي)
+  // آخر كلمة حقيقية بتفضل تلقائياً حوالين منتصف المساحة المرئية، مش لازقة في القاع
+  if(html.length > 0){
+    html.push(`<div class="live-check-spacer"></div>`);
+  }
+
   box.innerHTML = html.join(" ");
-  // نخلي الصندوق نازل دايماً على آخر كلمة اتضافت — سكرول جوّه الصندوق نفسه بس، مش على الصفحة أو المودال
   box.scrollTop = box.scrollHeight;
 }
 
@@ -610,7 +615,8 @@ function handleQuizInputChange(){
     activeQuiz.hintCharsRevealed = 0;
     renderLiveCheckBox();
   }
-  // مفيش أي سكرول على مستوى المودال أو الصفحة — صندوق الكتابة بيتابع الكيرسر جوّاه تلقائياً بالمتصفح
+  // مفيش تدخل يدوي في سكرول صندوق الكتابة — المتصفح بيتابع الكيرسر تلقائياً،
+  // والـ padding-bottom الكبير في CSS (.quiz-input) بيخلي آخر سطر يفضل حوالين منتصف الصندوق مش لازق في القاع
 }
 
 function handleQuizInputKey(e){
