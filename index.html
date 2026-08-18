@@ -292,7 +292,7 @@
   .quiz-input{
     width:100%; min-height: 120px; font-size: 1.25rem; line-height: 1.9;
     padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px;
-    resize: vertical; font-family: inherit; background: var(--paper); color: var(--ink);
+    resize: none; overflow: hidden; font-family: inherit; background: var(--paper); color: var(--ink);
     text-align: center;
   }
   .quiz-input:focus{ outline:none; border-color: var(--teal); }
@@ -312,6 +312,7 @@
     font-size: 1.2rem; line-height: 2.1; padding: 10px 14px;
     background: var(--paper-deep); border-radius: 10px; border: 1px dashed var(--line);
     margin-top: 10px; text-align: center; min-height: 20px;
+    max-height: 40vh; overflow-y: auto;
   }
   .compare-percentage{ margin-top: 8px; font-size: 0.88rem; color: var(--ink-soft); text-align:center; }
   .compare-legend{
@@ -524,7 +525,7 @@
 <div class="modal-overlay" id="quizModal">
   <div class="modal-box">
     <h3 id="quizTitle">تسميع الآية</h3>
-    <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl" onkeydown="window.handleQuizInputKey(event)"></textarea>
+    <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl" onkeydown="window.handleQuizInputKey(event)" oninput="window.handleQuizInputChange()"></textarea>
     <div class="live-check-box" id="liveCheckBox"></div>
     <div class="hint-box" id="hintBox"></div>
     <div class="modal-actions">
