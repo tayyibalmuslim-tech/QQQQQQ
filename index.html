@@ -305,6 +305,13 @@
   .word-ok{ color: var(--green-ok); font-weight:600; }
   .word-missing{ color: var(--red-err); opacity:0.6; }
   .word-extra{ color: var(--ink-soft); text-decoration: line-through; opacity:0.6; }
+  .word-wrong{ color: var(--red-err); font-weight:700; text-decoration: underline wavy; }
+
+  .live-check-box{
+    font-size: 1.2rem; line-height: 2.1; padding: 10px 14px;
+    background: var(--paper-deep); border-radius: 10px; border: 1px dashed var(--line);
+    margin-top: 10px; text-align: center; min-height: 20px;
+  }
   .compare-percentage{ margin-top: 8px; font-size: 0.88rem; color: var(--ink-soft); text-align:center; }
   .compare-legend{
     margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
@@ -480,6 +487,7 @@
       <span class="current" id="crumbRange"></span>
     </div>
     <h1 class="page-title" id="rangeContentTitle"></h1>
+    <div id="rangeQuizAllBox"></div>
     <div id="ayahsContainer"></div>
   </section>
 
@@ -515,7 +523,8 @@
 <div class="modal-overlay" id="quizModal">
   <div class="modal-box">
     <h3 id="quizTitle">تسميع الآية</h3>
-    <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl"></textarea>
+    <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl" onkeydown="window.handleQuizInputKey(event)"></textarea>
+    <div class="live-check-box" id="liveCheckBox"></div>
     <div class="hint-box" id="hintBox"></div>
     <div class="modal-actions">
       <button class="btn btn-gold btn-sm" onclick="window.showNextWordHint()">الكلمة التالية 💡</button>
