@@ -602,12 +602,11 @@ function autoGrowTextarea(el){
   el.style.height = el.scrollHeight + "px";
 }
 
-// خلي المكان اللي بيكتب فيه المستخدم يفضل ظاهر جوه المودال (اللي بيعمل سكرول لما المحتوى يكبر)
+// خلي آخر نتيجة تصحيح (أو صندوق الكتابة لو التصحيح لسه فاضي) تفضل ظاهرة، بدون قفزات متكررة أثناء الكتابة نفسها
 function scrollQuizIntoView(){
   const modalBox = document.querySelector("#quizModal .modal-box");
-  const liveBox = document.getElementById("liveCheckBox");
   if(!modalBox) return;
-  // نتابع آخر عنصر فيه محتوى فعلي (صندوق التصحيح الفوري لو ظاهر، أو صندوق الكتابة)
+  const liveBox = document.getElementById("liveCheckBox");
   const target = (liveBox && liveBox.innerHTML.trim()) ? liveBox : document.getElementById("quizInput");
   if(target){
     target.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -617,13 +616,14 @@ function scrollQuizIntoView(){
 function handleQuizInputChange(){
   const input = document.getElementById("quizInput");
   autoGrowTextarea(input);
-  // لو المستخدم بدأ يكتب حرف جديد، التلميح القديم بقى مش دقيق، فنلغيه ونعيد الرسم فوراً
+  // لو المستخدم بدأ يكتب حرف جديد، التلميح القديم بقى مش دقيق، فنلغيه ونعيد الرسم فوراً (من غير سكرول، عشان منقفزش أثناء الكتابة نفسها)
   if(activeQuiz && (activeQuiz.hintWordIndex !== null && activeQuiz.hintWordIndex !== undefined)){
     activeQuiz.hintWordIndex = null;
     activeQuiz.hintCharsRevealed = 0;
     renderLiveCheckBox();
   }
-  scrollQuizIntoView();
+  // ملحوظة: مفيش سكرول هنا عمداً — السكرول بيحصل مرة واحدة بس بعد اكتمال الكلمة (في handleQuizInputKey)
+  // عشان منعملش قفزة لفوق مع كل حرف وقفزة لتحت مع كل مسافة، وده كان بيعمل تأرجح مزعج
 }
 
 function handleQuizInputKey(e){
