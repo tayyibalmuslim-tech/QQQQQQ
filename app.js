@@ -416,10 +416,12 @@ function openQuiz(surah, ayah){
 
   document.getElementById("quizTitle").textContent = `تسميع ${getSurahName(surah)} - آية ${ayah}`;
   document.getElementById("quizInput").value = "";
-  document.getElementById("quizInput").style.height = "auto";
+  document.getElementById("quizInput").scrollTop = 0;
   document.getElementById("compareResult").innerHTML = "";
   document.getElementById("liveCheckBox").innerHTML = "";
+  document.getElementById("liveCheckBox").scrollTop = 0;
   document.getElementById("selfRateBox").className = "self-rate";
+  document.getElementById("quizResults").classList.remove("shown");
   document.getElementById("manualReviewDate").value = "";
   document.getElementById("quizModal").classList.add("active");
 }
@@ -462,10 +464,12 @@ function openQuizRange(startSurah, startAyah, endSurah, endAyah){
 
   document.getElementById("quizTitle").textContent = title;
   document.getElementById("quizInput").value = "";
-  document.getElementById("quizInput").style.height = "auto";
+  document.getElementById("quizInput").scrollTop = 0;
   document.getElementById("compareResult").innerHTML = "";
   document.getElementById("liveCheckBox").innerHTML = "";
+  document.getElementById("liveCheckBox").scrollTop = 0;
   document.getElementById("selfRateBox").className = "self-rate";
+  document.getElementById("quizResults").classList.remove("shown");
   document.getElementById("manualReviewDate").value = "";
   document.getElementById("quizModal").classList.add("active");
 }
@@ -581,6 +585,8 @@ function renderLiveCheckBox(){
   }
 
   box.innerHTML = html.join(" ");
+  // نخلي الصندوق نازل دايماً على آخر كلمة اتضافت — سكرول جوّه الصندوق نفسه بس، مش على الصفحة أو المودال
+  box.scrollTop = box.scrollHeight;
 }
 
 function liveCheckWords(){
@@ -596,40 +602,21 @@ function lastWordLength(raw){
   return m ? m[1].length : 0;
 }
 
-// تكبير صندوق الكتابة تلقائياً مع كل حرف/سطر جديد، بدل ما يفضل ثابت الحجم مع سكرول داخلي مزعج
-function autoGrowTextarea(el){
-  el.style.height = "auto";
-  el.style.height = el.scrollHeight + "px";
-}
-
-// خلي آخر نتيجة تصحيح (أو صندوق الكتابة لو التصحيح لسه فاضي) تفضل ظاهرة، بدون قفزات متكررة أثناء الكتابة نفسها
-function scrollQuizIntoView(){
-  const modalBox = document.querySelector("#quizModal .modal-box");
-  if(!modalBox) return;
-  const liveBox = document.getElementById("liveCheckBox");
-  const target = (liveBox && liveBox.innerHTML.trim()) ? liveBox : document.getElementById("quizInput");
-  if(target){
-    target.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }
-}
-
 function handleQuizInputChange(){
-  const input = document.getElementById("quizInput");
-  autoGrowTextarea(input);
-  // لو المستخدم بدأ يكتب حرف جديد، التلميح القديم بقى مش دقيق، فنلغيه ونعيد الرسم فوراً (من غير سكرول، عشان منقفزش أثناء الكتابة نفسها)
+  // لو المستخدم بدأ يكتب حرف جديد، التلميح القديم بقى مش دقيق، فنلغيه ونعيد الرسم
+  // (renderLiveCheckBox بتتكفل بالسكرول الداخلي لصندوق التصحيح لوحدها)
   if(activeQuiz && (activeQuiz.hintWordIndex !== null && activeQuiz.hintWordIndex !== undefined)){
     activeQuiz.hintWordIndex = null;
     activeQuiz.hintCharsRevealed = 0;
     renderLiveCheckBox();
   }
-  // ملحوظة: مفيش سكرول هنا عمداً — السكرول بيحصل مرة واحدة بس بعد اكتمال الكلمة (في handleQuizInputKey)
-  // عشان منعملش قفزة لفوق مع كل حرف وقفزة لتحت مع كل مسافة، وده كان بيعمل تأرجح مزعج
+  // مفيش أي سكرول على مستوى المودال أو الصفحة — صندوق الكتابة بيتابع الكيرسر جوّاه تلقائياً بالمتصفح
 }
 
 function handleQuizInputKey(e){
   if(e.key === " " || e.key === "Spacebar"){
     // نأجل التنفيذ خطوة وحدة عشان المسافة تتسجل في value الأول
-    setTimeout(() => { liveCheckWords(); scrollQuizIntoView(); }, 0);
+    setTimeout(liveCheckWords, 0);
   }
 }
 
@@ -667,6 +654,8 @@ function checkQuizAnswer(){
     </div>
   `;
   document.getElementById("selfRateBox").className = "self-rate shown";
+  document.getElementById("quizResults").classList.add("shown");
+  document.getElementById("quizResults").scrollTop = 0;
 }
 
 // ---------- Spaced Repetition ----------
