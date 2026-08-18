@@ -488,11 +488,15 @@ function liveCheckWords(){
     const uWord = userCompletedWords[idx];
     const uNorm = normalizeForCompare(uWord);
     if(idx >= originalWords.length){
-      html.push(`<span class="word-extra">${uWord}</span>`); // كلمة زيادة عن حد الفقرة
+      html.push(`<span class="word-extra">${uWord}</span>`); // كلمة زيادة عن حد الفقرة (مفيش أصل نقارنها بيه، فبتفضل زي ما كتبتها)
       continue;
     }
     const isMatch = uNorm === originalNorm[idx];
-    html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${uWord}</span>`);
+    // المقارنة بتتم على النص من غير تشكيل (uNorm مقابل originalNorm)
+    // لكن العرض دايماً بالكلمة الأصلية المشكّلة من القرآن (originalWords) لو الكلمة صح
+    // ولو غلط، نورّي كلمة المستخدم زي ما كتبها عشان يشوف غلطه بالظبط
+    const displayWord = isMatch ? originalWords[idx] : uWord;
+    html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${displayWord}</span>`);
   }
   box.innerHTML = html.join(" ");
 }
