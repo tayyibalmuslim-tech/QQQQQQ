@@ -322,6 +322,19 @@ function renderAyahs(range){
   wrap.innerHTML = "";
   const verses = getVersesInRange(range.startSurah, range.startAyah, range.endSurah, range.endAyah);
 
+  const quizAllBox = document.getElementById("rangeQuizAllBox");
+  if(quizAllBox){
+    if(verses.length > 1){
+      quizAllBox.innerHTML = `
+        <button class="btn btn-primary" style="width:100%;margin-bottom:14px;"
+          onclick="window.openQuizRange(${range.startSurah}, ${range.startAyah}, ${range.endSurah}, ${range.endAyah})">
+          تسميع الفقرة كاملة (كقطعة واحدة) ✍️📖
+        </button>`;
+    } else {
+      quizAllBox.innerHTML = "";
+    }
+  }
+
   verses.forEach(v => {
     const key = verseKey(v.surah, v.ayah);
     const safeKey = key.replace(/[^a-zA-Z0-9]/g,'_');
@@ -397,13 +410,42 @@ function openQuiz(surah, ayah){
   const text = getVerseText(surah, ayah);
   if(!text){ showToast("نص هذه الآية غير متاح", true); return; }
 
-  activeQuiz = { key, surah, ayah, text, revealedWordsCount: 0 };
+  activeQuiz = { key, surah, ayah, text, isRange: false, revealedWordsCount: 0 };
 
   document.getElementById("quizTitle").textContent = `تسميع ${getSurahName(surah)} - آية ${ayah}`;
   document.getElementById("quizInput").value = "";
   document.getElementById("hintBox").className = "hint-box";
   document.getElementById("hintBox").textContent = "";
   document.getElementById("compareResult").innerHTML = "";
+  document.getElementById("liveCheckBox").innerHTML = "";
+  document.getElementById("selfRateBox").className = "self-rate";
+  document.getElementById("manualReviewDate").value = "";
+  document.getElementById("quizModal").classList.add("active");
+}
+
+// تسميع نطاق كامل (أكتر من آية) كقطعة واحدة متصلة، بدون تقسيم على حدود الآيات
+function openQuizRange(startSurah, startAyah, endSurah, endAyah){
+  const verses = getVersesInRange(startSurah, startAyah, endSurah, endAyah);
+  const texts = verses.map(v => getVerseText(v.surah, v.ayah)).filter(Boolean);
+  if(texts.length === 0){ showToast("نص هذا النطاق غير متاح", true); return; }
+
+  // دمج كل الآيات في كتلة نصية واحدة متصلة (بدون أي فاصل يشير لحدود الآيات)
+  const fullText = texts.join(" ");
+  // مفتاح مركّب لتتبّع تقدّم الفقرة ككل في نظام المراجعة المتباعدة
+  const key = "range_" + verseKey(startSurah, startAyah) + "_to_" + verseKey(endSurah, endAyah);
+
+  activeQuiz = { key, surah: startSurah, ayah: startAyah, text: fullText, isRange: true, revealedWordsCount: 0 };
+
+  const title = (startSurah === endSurah)
+    ? `تسميع ${getSurahName(startSurah)} - من آية ${startAyah} إلى ${endAyah} (كقطعة واحدة)`
+    : `تسميع من ${getSurahName(startSurah)}:${startAyah} إلى ${getSurahName(endSurah)}:${endAyah} (كقطعة واحدة)`;
+
+  document.getElementById("quizTitle").textContent = title;
+  document.getElementById("quizInput").value = "";
+  document.getElementById("hintBox").className = "hint-box";
+  document.getElementById("hintBox").textContent = "";
+  document.getElementById("compareResult").innerHTML = "";
+  document.getElementById("liveCheckBox").innerHTML = "";
   document.getElementById("selfRateBox").className = "self-rate";
   document.getElementById("manualReviewDate").value = "";
   document.getElementById("quizModal").classList.add("active");
@@ -411,6 +453,7 @@ function openQuiz(surah, ayah){
 
 function closeQuizModal(){
   document.getElementById("quizModal").classList.remove("active");
+  document.getElementById("liveCheckBox").innerHTML = "";
   activeQuiz = null;
 }
 
@@ -422,6 +465,48 @@ function showNextWordHint(){
   const box = document.getElementById("hintBox");
   box.className = "hint-box shown";
   box.innerHTML = `<b>البداية:</b> ${revealed} ...`;
+}
+
+// ---------- تصحيح فوري كلمة بكلمة (عند الضغط على مسافة) ----------
+function liveCheckWords(){
+  if(!activeQuiz) return;
+  const box = document.getElementById("liveCheckBox");
+  const raw = document.getElementById("quizInput").value;
+
+  // الكلمات المكتملة فقط (اللي بعدها مسافة) — آخر كلمة لسه بتتكتب بنتجاهلها
+  const endsWithSpace = /\s$/.test(raw);
+  const completedRaw = endsWithSpace ? raw.trim() : raw.slice(0, raw.length - lastWordLength(raw)).trim();
+
+  const originalWords = tokenize(activeQuiz.text);
+  const originalNorm = originalWords.map(normalizeForCompare);
+  const userCompletedWords = tokenize(completedRaw);
+
+  if(userCompletedWords.length === 0){ box.innerHTML = ""; return; }
+
+  let html = [];
+  for(let idx = 0; idx < userCompletedWords.length; idx++){
+    const uWord = userCompletedWords[idx];
+    const uNorm = normalizeForCompare(uWord);
+    if(idx >= originalWords.length){
+      html.push(`<span class="word-extra">${uWord}</span>`); // كلمة زيادة عن حد الفقرة
+      continue;
+    }
+    const isMatch = uNorm === originalNorm[idx];
+    html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${uWord}</span>`);
+  }
+  box.innerHTML = html.join(" ");
+}
+
+function lastWordLength(raw){
+  const m = raw.match(/(\S+)$/);
+  return m ? m[1].length : 0;
+}
+
+function handleQuizInputKey(e){
+  if(e.key === " " || e.key === "Spacebar"){
+    // نأجل التنفيذ خطوة وحدة عشان المسافة تتسجل في value الأول
+    setTimeout(liveCheckWords, 0);
+  }
 }
 
 function checkQuizAnswer(){
@@ -675,9 +760,11 @@ window.deleteRange = deleteRange;
 window.openRange = openRange;
 window.toggleAyahText = toggleAyahText;
 window.openQuiz = openQuiz;
+window.openQuizRange = openQuizRange;
 window.closeQuizModal = closeQuizModal;
 window.showNextWordHint = showNextWordHint;
 window.checkQuizAnswer = checkQuizAnswer;
+window.handleQuizInputKey = handleQuizInputKey;
 window.submitSelfRating = submitSelfRating;
 window.submitManualDate = submitManualDate;
 window.switchAuthTab = switchAuthTab;
