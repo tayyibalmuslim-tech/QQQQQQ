@@ -584,12 +584,6 @@ function renderLiveCheckBox(){
     html.push(`<span class="word-hint">${displayHint}</span>` + verseMarkerAfter(activeQuiz.hintWordIndex));
   }
 
-  // نضيف فراغ وهمي بارتفاع نص الصندوق بعد آخر كلمة، فلما المتصفح يعمل سكرول لآخر نقطة (سلوكه الطبيعي)
-  // آخر كلمة حقيقية بتفضل تلقائياً حوالين منتصف المساحة المرئية، مش لازقة في القاع
-  if(html.length > 0){
-    html.push(`<div class="live-check-spacer"></div>`);
-  }
-
   box.innerHTML = html.join(" ");
   box.scrollTop = box.scrollHeight;
 }
