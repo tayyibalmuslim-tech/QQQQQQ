@@ -367,7 +367,8 @@ function renderAyahs(range){
 // ---------- Arabic text normalization for comparison ----------
 function stripDiacritics(text){
   return text
-    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u08F0-\u08FF]/g, "")
+    .replace(/\u0670/g, "ا") // الألف الخنجرية (فوق الحرف) نعتبرها ألف عادية، لأنها مش موجودة في لوحة المفاتيح العادية
+    .replace(/[\u064B-\u065F\u06D6-\u06ED\u08F0-\u08FF]/g, "") // باقي علامات التشكيل تتشال عادي
     .replace(/ـ/g, "")
     .replace(/[،.,؛:؟!"'«»()"]/g, "")
     .replace(/[إأآاٱ]/g, "ا")
@@ -410,13 +411,11 @@ function openQuiz(surah, ayah){
   const text = getVerseText(surah, ayah);
   if(!text){ showToast("نص هذه الآية غير متاح", true); return; }
 
-  activeQuiz = { key, surah, ayah, text, isRange: false, verseEndWordIndexes: null, revealedWordsCount: 0 };
+  activeQuiz = { key, surah, ayah, text, isRange: false, verseEndWordIndexes: null, verseEndAyahNumbers: null, hintWordIndex: null, hintCharsRevealed: 0 };
 
   document.getElementById("quizTitle").textContent = `تسميع ${getSurahName(surah)} - آية ${ayah}`;
   document.getElementById("quizInput").value = "";
   document.getElementById("quizInput").style.height = "auto";
-  document.getElementById("hintBox").className = "hint-box";
-  document.getElementById("hintBox").textContent = "";
   document.getElementById("compareResult").innerHTML = "";
   document.getElementById("liveCheckBox").innerHTML = "";
   document.getElementById("selfRateBox").className = "self-rate";
@@ -426,25 +425,35 @@ function openQuiz(surah, ayah){
 
 // تسميع نطاق كامل (أكتر من آية) كقطعة واحدة متصلة، بدون تقسيم على حدود الآيات
 function openQuizRange(startSurah, startAyah, endSurah, endAyah){
-  const verses = getVersesInRange(startSurah, startAyah, endSurah, endAyah);
-  const texts = verses.map(v => getVerseText(v.surah, v.ayah)).filter(Boolean);
+  const allVerses = getVersesInRange(startSurah, startAyah, endSurah, endAyah);
+  // نبني verses و texts مع بعض بضمان توافق الترتيب 100%، ونتجاهل أي آية نصها غير متاح
+  const verses = [];
+  const texts = [];
+  allVerses.forEach(v => {
+    const t = getVerseText(v.surah, v.ayah);
+    if(t){ verses.push(v); texts.push(t); }
+  });
   if(texts.length === 0){ showToast("نص هذا النطاق غير متاح", true); return; }
 
   // دمج كل الآيات في كتلة نصية واحدة متصلة (النص نفسه بدون أي فاصل، عشان المقارنة/الحساب تفضل زي ما هي)
   const fullText = texts.join(" ");
 
-  // نحسب index آخر كلمة في كل آية (بترقيم الكلمات المتصل عبر النطاق كله) عشان نعرف نحط فاصل بصري بعدها وقت العرض فقط
+  // نبني خريطة: لكل index آخر كلمة في آية معينة → رقم الآية دي (بترقيمها الفعلي في القرآن، مش ترقيم النطاق)
+  // عشان نعرض الفاصل ۝ ورقم الآية الحقيقي جواه وقت العرض فقط، من غير ما نأثر على النص المستخدم في الحساب
   const verseEndWordIndexes = [];
+  const verseEndAyahNumbers = {};
   let wordCounter = 0;
-  texts.forEach(t => {
-    wordCounter += tokenize(t).length;
-    verseEndWordIndexes.push(wordCounter - 1); // آخر index لكلمات هذه الآية
+  verses.forEach((v, i) => {
+    wordCounter += tokenize(texts[i]).length;
+    const endIdx = wordCounter - 1;
+    verseEndWordIndexes.push(endIdx);
+    verseEndAyahNumbers[endIdx] = v.ayah;
   });
 
   // مفتاح مركّب لتتبّع تقدّم الفقرة ككل في نظام المراجعة المتباعدة
   const key = "range_" + verseKey(startSurah, startAyah) + "_to_" + verseKey(endSurah, endAyah);
 
-  activeQuiz = { key, surah: startSurah, ayah: startAyah, text: fullText, isRange: true, verseEndWordIndexes, revealedWordsCount: 0 };
+  activeQuiz = { key, surah: startSurah, ayah: startAyah, text: fullText, isRange: true, verseEndWordIndexes, verseEndAyahNumbers, hintWordIndex: null, hintCharsRevealed: 0 };
 
   const title = (startSurah === endSurah)
     ? `تسميع ${getSurahName(startSurah)} - من آية ${startAyah} إلى ${endAyah} (كقطعة واحدة)`
@@ -453,8 +462,6 @@ function openQuizRange(startSurah, startAyah, endSurah, endAyah){
   document.getElementById("quizTitle").textContent = title;
   document.getElementById("quizInput").value = "";
   document.getElementById("quizInput").style.height = "auto";
-  document.getElementById("hintBox").className = "hint-box";
-  document.getElementById("hintBox").textContent = "";
   document.getElementById("compareResult").innerHTML = "";
   document.getElementById("liveCheckBox").innerHTML = "";
   document.getElementById("selfRateBox").className = "self-rate";
@@ -468,37 +475,84 @@ function closeQuizModal(){
   activeQuiz = null;
 }
 
+// يحدد index الكلمة اللي المفروض نلمّح بيها: أول كلمة بعد آخر كلمة كتبها المستخدم فعلياً
+function getHintTargetIndex(){
+  return getCompletedWordCount(); // index أول كلمة لسه ما كتبتهاش (0-based، ونفس عدد الكلمات المكتملة)
+}
+
+// زرار "الكلمة التالية 💡": يورّي كلمة كاملة إضافية كل ضغطة، بدايةً من بعد آخر كلمة كتبها المستخدم فعلاً
 function showNextWordHint(){
   if(!activeQuiz) return;
   const words = tokenize(activeQuiz.text);
-  activeQuiz.revealedWordsCount = Math.min(activeQuiz.revealedWordsCount + 1, words.length);
-  const revealed = words.slice(0, activeQuiz.revealedWordsCount).join(" ");
-  const box = document.getElementById("hintBox");
-  box.className = "hint-box shown";
-  box.innerHTML = `<b>البداية:</b> ${revealed} ...`;
+  const targetIdx = getHintTargetIndex();
+  if(targetIdx >= words.length){ showToast("وصلت لنهاية النص", true); return; }
+
+  if(activeQuiz.hintWordIndex !== targetIdx){
+    // كلمة جديدة عن آخر مرة (يبقى المستخدم كتب/تخطى كلمات، أو أول ضغطة) — نبدأ تلميحها من كلمة كاملة
+    activeQuiz.hintWordIndex = targetIdx;
+    activeQuiz.hintCharsRevealed = words[targetIdx].length;
+  } else {
+    // نفس الكلمة اللي كانت متلمّحة قبل كده وبردو مكتملناش — ممفيش داعي نزود حاجة، هي أصلاً ظاهرة كاملة
+    activeQuiz.hintCharsRevealed = words[targetIdx].length;
+  }
+  renderLiveCheckBox();
 }
 
-// دالة مساعدة: هل هذه الكلمة (بترقيمها المتصل idx) هي آخر كلمة في آية؟ لو كذلك نرجع علامة الفاصل، وإلا نص فاضي
+// زرار "الحرف التالي 🔤": يورّي حرف واحد إضافي بس كل ضغطة، بدايةً من نفس نقطة البداية
+function showNextCharHint(){
+  if(!activeQuiz) return;
+  const words = tokenize(activeQuiz.text);
+  const targetIdx = getHintTargetIndex();
+  if(targetIdx >= words.length){ showToast("وصلت لنهاية النص", true); return; }
+
+  if(activeQuiz.hintWordIndex !== targetIdx){
+    // كلمة جديدة — نبدأ من أول حرف بس
+    activeQuiz.hintWordIndex = targetIdx;
+    activeQuiz.hintCharsRevealed = 1;
+  } else {
+    // نفس الكلمة، نزود حرف واحد كل ضغطة لحد ما تكتمل
+    activeQuiz.hintCharsRevealed = Math.min((activeQuiz.hintCharsRevealed || 0) + 1, words[targetIdx].length);
+  }
+  renderLiveCheckBox();
+}
+
+// تحويل رقم إنجليزي (زي 12) لرقم عربي هندي (زي ١٢) عشان يبقى متسق مع شكل ترقيم الآيات في المصحف
+function toArabicDigits(num){
+  const arabicDigits = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
+  return String(num).split("").map(d => arabicDigits[d] || d).join("");
+}
+
+// دالة مساعدة: هل هذه الكلمة (بترقيمها المتصل idx) هي آخر كلمة في آية؟ لو كذلك نرجع علامة الفاصل ومعاها رقم الآية، وإلا نص فاضي
 function verseMarkerAfter(idx){
   if(!activeQuiz || !activeQuiz.isRange || !activeQuiz.verseEndWordIndexes) return "";
-  return activeQuiz.verseEndWordIndexes.includes(idx) ? ` <span class="verse-marker">۝</span> ` : "";
+  if(!activeQuiz.verseEndWordIndexes.includes(idx)) return "";
+  const ayahNum = activeQuiz.verseEndAyahNumbers ? activeQuiz.verseEndAyahNumbers[idx] : null;
+  const numDisplay = ayahNum ? toArabicDigits(ayahNum) : "";
+  return ` <span class="verse-marker">۝${numDisplay}</span> `;
 }
 
 // ---------- تصحيح فوري كلمة بكلمة (عند الضغط على مسافة) ----------
-function liveCheckWords(){
+
+// عدد الكلمات المكتملة فعلياً في صندوق الكتابة (اللي المستخدم خلص كتابتها وبعدها مسافة)
+function getCompletedWordCount(){
+  const raw = document.getElementById("quizInput").value;
+  const endsWithSpace = /\s$/.test(raw);
+  const completedRaw = endsWithSpace ? raw.trim() : raw.slice(0, raw.length - lastWordLength(raw)).trim();
+  return tokenize(completedRaw).length;
+}
+
+// الدالة المركزية لرسم صندوق التصحيح الفوري: بترسم كل الكلمات المصححة (أخضر/أحمر) + كلمة أو حرف التلميح (أصفر) لو موجود
+function renderLiveCheckBox(){
   if(!activeQuiz) return;
   const box = document.getElementById("liveCheckBox");
   const raw = document.getElementById("quizInput").value;
 
-  // الكلمات المكتملة فقط (اللي بعدها مسافة) — آخر كلمة لسه بتتكتب بنتجاهلها
   const endsWithSpace = /\s$/.test(raw);
   const completedRaw = endsWithSpace ? raw.trim() : raw.slice(0, raw.length - lastWordLength(raw)).trim();
 
   const originalWords = tokenize(activeQuiz.text);
   const originalNorm = originalWords.map(normalizeForCompare);
   const userCompletedWords = tokenize(completedRaw);
-
-  if(userCompletedWords.length === 0){ box.innerHTML = ""; return; }
 
   let html = [];
   for(let idx = 0; idx < userCompletedWords.length; idx++){
@@ -515,7 +569,25 @@ function liveCheckWords(){
     const displayWord = isMatch ? originalWords[idx] : uWord;
     html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${displayWord}</span>` + verseMarkerAfter(idx));
   }
+
+  // إضافة تلميح الكلمة/الحرف التالي لو المستخدم دوس على زرار التلميح
+  if(activeQuiz.hintWordIndex !== null && activeQuiz.hintWordIndex !== undefined && activeQuiz.hintWordIndex < originalWords.length){
+    const hintWord = originalWords[activeQuiz.hintWordIndex];
+    const hintCharsCount = activeQuiz.hintCharsRevealed || 0;
+    // لو حروف الكلمة اتكشفت بالكامل أو أكتر (يعني دوس "الكلمة التالية")، نعرض الكلمة كاملة
+    const displayHint = (hintCharsCount >= hintWord.length) ? hintWord : hintWord.slice(0, hintCharsCount);
+    html.push(`<span class="word-hint">${displayHint}</span>` + verseMarkerAfter(activeQuiz.hintWordIndex));
+  }
+
   box.innerHTML = html.join(" ");
+}
+
+function liveCheckWords(){
+  if(!activeQuiz) return;
+  // أي كتابة جديدة من المستخدم تلغي التلميح القديم (لأنه غالباً كتب الكلمة الملمّحة أو تخطاها)
+  activeQuiz.hintWordIndex = null;
+  activeQuiz.hintCharsRevealed = 0;
+  renderLiveCheckBox();
 }
 
 function lastWordLength(raw){
@@ -544,6 +616,12 @@ function scrollQuizIntoView(){
 function handleQuizInputChange(){
   const input = document.getElementById("quizInput");
   autoGrowTextarea(input);
+  // لو المستخدم بدأ يكتب حرف جديد، التلميح القديم بقى مش دقيق، فنلغيه ونعيد الرسم فوراً
+  if(activeQuiz && (activeQuiz.hintWordIndex !== null && activeQuiz.hintWordIndex !== undefined)){
+    activeQuiz.hintWordIndex = null;
+    activeQuiz.hintCharsRevealed = 0;
+    renderLiveCheckBox();
+  }
   scrollQuizIntoView();
 }
 
@@ -808,6 +886,7 @@ window.openQuiz = openQuiz;
 window.openQuizRange = openQuizRange;
 window.closeQuizModal = closeQuizModal;
 window.showNextWordHint = showNextWordHint;
+window.showNextCharHint = showNextCharHint;
 window.checkQuizAnswer = checkQuizAnswer;
 window.handleQuizInputKey = handleQuizInputKey;
 window.handleQuizInputChange = handleQuizInputChange;
