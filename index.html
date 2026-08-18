@@ -306,7 +306,8 @@
   .word-missing{ color: var(--red-err); opacity:0.6; }
   .word-extra{ color: var(--ink-soft); text-decoration: line-through; opacity:0.6; }
   .word-wrong{ color: var(--red-err); font-weight:700; text-decoration: underline wavy; }
-  .verse-marker{ color: var(--gold, #B8963E); font-weight:400; opacity:0.75; font-size:0.9em; margin: 0 2px; }
+  .verse-marker{ color: var(--gold, #9C7A2E); font-weight:600; opacity:0.9; font-size:1em; margin: 0 3px; letter-spacing: -1px; }
+  .word-hint{ color:#8A6D00; background:#FFF3C4; font-weight:700; padding:1px 6px; border-radius:6px; }
 
   .live-check-box{
     font-size: 1.2rem; line-height: 2.1; padding: 10px 14px;
@@ -527,9 +528,9 @@
     <h3 id="quizTitle">تسميع الآية</h3>
     <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl" onkeydown="window.handleQuizInputKey(event)" oninput="window.handleQuizInputChange()"></textarea>
     <div class="live-check-box" id="liveCheckBox"></div>
-    <div class="hint-box" id="hintBox"></div>
     <div class="modal-actions">
       <button class="btn btn-gold btn-sm" onclick="window.showNextWordHint()">الكلمة التالية 💡</button>
+      <button class="btn btn-gold btn-sm" onclick="window.showNextCharHint()">الحرف التالي 🔤</button>
       <button class="btn btn-primary" onclick="window.checkQuizAnswer()">تحقق ✓</button>
       <button class="btn btn-outline btn-sm" onclick="window.closeQuizModal()">إغلاق</button>
     </div>
