@@ -289,10 +289,46 @@
     box-shadow: 0 12px 40px rgba(0,0,0,0.35);
   }
   .modal-box h3{ margin:0 0 14px; color: var(--teal-deep); font-size: 1.15rem; }
+
+  /* ===== مودال التسميع: ارتفاع ثابت، مفيش سكرول على مستوى المودال نفسه ===== */
+  .quiz-modal-box{
+    height: 90vh;           /* ارتفاع ثابت مش max-height، عشان التقسيم بالنسب يشتغل */
+    max-height: 90vh;
+    overflow: hidden;       /* السكرول بيحصل جوه الصناديق الداخلية بس، مش هنا */
+    display: flex;
+    flex-direction: column;
+    padding: 18px;
+  }
+  .quiz-header{
+    flex: 0 0 auto;         /* ثابت في الأعلى، مش بيتزحزح */
+    margin: 0 0 12px !important;
+  }
+  .quiz-body{
+    flex: 1 1 auto;         /* بياخد كل المساحة المتبقية */
+    min-height: 0;          /* ضروري جداً عشان السكرول الداخلي يشتغل صح جوه flex */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .quiz-footer{
+    flex: 0 0 auto;         /* ثابتة في الأسفل، مش بتتزحزح */
+    margin-top: 12px !important;
+  }
+  .quiz-results{
+    flex: 0 0 auto;
+    max-height: 38vh;       /* لو النتيجة طويلة، بتعمل سكرول جواها هي بس */
+    overflow-y: auto;
+    margin-top: 10px;
+    display: none;          /* مخفية لحد ما المستخدم يدوس "تحقق" */
+  }
+  .quiz-results.shown{ display: block; }
+
   .quiz-input{
-    width:100%; min-height: 120px; font-size: 1.25rem; line-height: 1.9;
+    flex: 2 1 0;            /* الثلثين للكتابة */
+    min-height: 0;          /* ضروري عشان السكرول الداخلي يشتغل */
+    width:100%; font-size: 1.25rem; line-height: 1.9;
     padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px;
-    resize: none; overflow: hidden; font-family: inherit; background: var(--paper); color: var(--ink);
+    resize: none; overflow-y: auto; font-family: inherit; background: var(--paper); color: var(--ink);
     text-align: center;
   }
   .quiz-input:focus{ outline:none; border-color: var(--teal); }
@@ -310,10 +346,12 @@
   .word-hint{ color:#8A6D00; background:#FFF3C4; font-weight:700; padding:1px 6px; border-radius:6px; }
 
   .live-check-box{
+    flex: 1 1 0;            /* الثلث للتصحيح اللحظي */
+    min-height: 0;          /* ضروري عشان السكرول الداخلي يشتغل */
+    overflow-y: auto;
     font-size: 1.2rem; line-height: 2.1; padding: 10px 14px;
     background: var(--paper-deep); border-radius: 10px; border: 1px dashed var(--line);
-    margin-top: 10px; text-align: center; min-height: 20px;
-    max-height: 40vh; overflow-y: auto;
+    text-align: center;
   }
   .compare-percentage{ margin-top: 8px; font-size: 0.88rem; color: var(--ink-soft); text-align:center; }
   .compare-legend{
@@ -524,32 +562,44 @@
 
 <!-- ============ Quiz Modal ============ -->
 <div class="modal-overlay" id="quizModal">
-  <div class="modal-box">
-    <h3 id="quizTitle">تسميع الآية</h3>
-    <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl" onkeydown="window.handleQuizInputKey(event)" oninput="window.handleQuizInputChange()"></textarea>
-    <div class="live-check-box" id="liveCheckBox"></div>
-    <div class="modal-actions">
+  <div class="modal-box quiz-modal-box">
+
+    <!-- العنوان ثابت في الأعلى -->
+    <h3 id="quizTitle" class="quiz-header">تسميع الآية</h3>
+
+    <!-- المنطقة الوسطى: الكتابة (ثلثين) + التصحيح اللحظي (ثلث)، كل واحد بسكرول داخلي مستقل -->
+    <div class="quiz-body">
+      <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl" onkeydown="window.handleQuizInputKey(event)" oninput="window.handleQuizInputChange()"></textarea>
+      <div class="live-check-box" id="liveCheckBox"></div>
+    </div>
+
+    <!-- نتيجة التحقق النهائي + التقييم (بسكرول داخلي خاص بيها، بتظهر بعد الضغط على تحقق) -->
+    <div class="quiz-results" id="quizResults">
+      <div id="compareResult"></div>
+      <div class="self-rate" id="selfRateBox">
+        <p>قيّم نفسك في هذا التسميع:</p>
+        <div class="rate-grid">
+          <button class="rate-btn excellent" onclick="window.submitSelfRating('excellent')">ممتاز<small>+١٠ أيام</small></button>
+          <button class="rate-btn good" onclick="window.submitSelfRating('good')">جيد<small>+٥ أيام</small></button>
+          <button class="rate-btn medium" onclick="window.submitSelfRating('medium')">متوسط<small>+٢ أيام</small></button>
+          <button class="rate-btn bad" onclick="window.submitSelfRating('bad')">سيء<small>−٢ أيام</small></button>
+        </div>
+        <div class="manual-date-row">
+          <label style="font-size:0.82rem;color:var(--ink-soft);">أو سجّل تاريخ مراجعة يدوي:</label>
+          <input type="date" id="manualReviewDate">
+          <button class="btn btn-outline btn-sm" onclick="window.submitManualDate()">تسجيل</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- الأزرار ثابتة في الأسفل -->
+    <div class="modal-actions quiz-footer">
       <button class="btn btn-gold btn-sm" onclick="window.showNextWordHint()">الكلمة التالية 💡</button>
       <button class="btn btn-gold btn-sm" onclick="window.showNextCharHint()">الحرف التالي 🔤</button>
       <button class="btn btn-primary" onclick="window.checkQuizAnswer()">تحقق ✓</button>
       <button class="btn btn-outline btn-sm" onclick="window.closeQuizModal()">إغلاق</button>
     </div>
-    <div id="compareResult"></div>
 
-    <div class="self-rate" id="selfRateBox">
-      <p>قيّم نفسك في هذا التسميع:</p>
-      <div class="rate-grid">
-        <button class="rate-btn excellent" onclick="window.submitSelfRating('excellent')">ممتاز<small>+١٠ أيام</small></button>
-        <button class="rate-btn good" onclick="window.submitSelfRating('good')">جيد<small>+٥ أيام</small></button>
-        <button class="rate-btn medium" onclick="window.submitSelfRating('medium')">متوسط<small>+٢ أيام</small></button>
-        <button class="rate-btn bad" onclick="window.submitSelfRating('bad')">سيء<small>−٢ أيام</small></button>
-      </div>
-      <div class="manual-date-row">
-        <label style="font-size:0.82rem;color:var(--ink-soft);">أو سجّل تاريخ مراجعة يدوي:</label>
-        <input type="date" id="manualReviewDate">
-        <button class="btn btn-outline btn-sm" onclick="window.submitManualDate()">تسجيل</button>
-      </div>
-    </div>
   </div>
 </div>
 
