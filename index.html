@@ -327,7 +327,7 @@
     flex: 2 1 0;            /* الثلثين للكتابة */
     min-height: 0;          /* ضروري عشان السكرول الداخلي يشتغل */
     width:100%; font-size: 1.25rem; line-height: 1.9;
-    padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; padding-bottom: 45%; border: 1.5px solid var(--line); border-radius: 10px;
     resize: none; overflow-y: auto; font-family: inherit; background: var(--paper); color: var(--ink);
     text-align: center;
   }
@@ -353,6 +353,8 @@
     background: var(--paper-deep); border-radius: 10px; border: 1px dashed var(--line);
     text-align: center;
   }
+  /* فراغ وهمي بعد آخر كلمة، عشان لما نعمل سكرول لآخر نقطة، آخر كلمة حقيقية تفضل حوالين منتصف الصندوق مش لازقة في القاع */
+  .live-check-spacer{ height: 45%; min-height: 60px; }
   .compare-percentage{ margin-top: 8px; font-size: 0.88rem; color: var(--ink-soft); text-align:center; }
   .compare-legend{
     margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
