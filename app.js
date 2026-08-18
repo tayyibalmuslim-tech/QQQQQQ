@@ -410,7 +410,7 @@ function openQuiz(surah, ayah){
   const text = getVerseText(surah, ayah);
   if(!text){ showToast("نص هذه الآية غير متاح", true); return; }
 
-  activeQuiz = { key, surah, ayah, text, isRange: false, revealedWordsCount: 0 };
+  activeQuiz = { key, surah, ayah, text, isRange: false, verseEndWordIndexes: null, revealedWordsCount: 0 };
 
   document.getElementById("quizTitle").textContent = `تسميع ${getSurahName(surah)} - آية ${ayah}`;
   document.getElementById("quizInput").value = "";
@@ -429,12 +429,21 @@ function openQuizRange(startSurah, startAyah, endSurah, endAyah){
   const texts = verses.map(v => getVerseText(v.surah, v.ayah)).filter(Boolean);
   if(texts.length === 0){ showToast("نص هذا النطاق غير متاح", true); return; }
 
-  // دمج كل الآيات في كتلة نصية واحدة متصلة (بدون أي فاصل يشير لحدود الآيات)
+  // دمج كل الآيات في كتلة نصية واحدة متصلة (النص نفسه بدون أي فاصل، عشان المقارنة/الحساب تفضل زي ما هي)
   const fullText = texts.join(" ");
+
+  // نحسب index آخر كلمة في كل آية (بترقيم الكلمات المتصل عبر النطاق كله) عشان نعرف نحط فاصل بصري بعدها وقت العرض فقط
+  const verseEndWordIndexes = [];
+  let wordCounter = 0;
+  texts.forEach(t => {
+    wordCounter += tokenize(t).length;
+    verseEndWordIndexes.push(wordCounter - 1); // آخر index لكلمات هذه الآية
+  });
+
   // مفتاح مركّب لتتبّع تقدّم الفقرة ككل في نظام المراجعة المتباعدة
   const key = "range_" + verseKey(startSurah, startAyah) + "_to_" + verseKey(endSurah, endAyah);
 
-  activeQuiz = { key, surah: startSurah, ayah: startAyah, text: fullText, isRange: true, revealedWordsCount: 0 };
+  activeQuiz = { key, surah: startSurah, ayah: startAyah, text: fullText, isRange: true, verseEndWordIndexes, revealedWordsCount: 0 };
 
   const title = (startSurah === endSurah)
     ? `تسميع ${getSurahName(startSurah)} - من آية ${startAyah} إلى ${endAyah} (كقطعة واحدة)`
@@ -467,6 +476,12 @@ function showNextWordHint(){
   box.innerHTML = `<b>البداية:</b> ${revealed} ...`;
 }
 
+// دالة مساعدة: هل هذه الكلمة (بترقيمها المتصل idx) هي آخر كلمة في آية؟ لو كذلك نرجع علامة الفاصل، وإلا نص فاضي
+function verseMarkerAfter(idx){
+  if(!activeQuiz || !activeQuiz.isRange || !activeQuiz.verseEndWordIndexes) return "";
+  return activeQuiz.verseEndWordIndexes.includes(idx) ? ` <span class="verse-marker">۝</span> ` : "";
+}
+
 // ---------- تصحيح فوري كلمة بكلمة (عند الضغط على مسافة) ----------
 function liveCheckWords(){
   if(!activeQuiz) return;
@@ -496,7 +511,7 @@ function liveCheckWords(){
     // لكن العرض دايماً بالكلمة الأصلية المشكّلة من القرآن (originalWords) لو الكلمة صح
     // ولو غلط، نورّي كلمة المستخدم زي ما كتبها عشان يشوف غلطه بالظبط
     const displayWord = isMatch ? originalWords[idx] : uWord;
-    html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${displayWord}</span>`);
+    html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${displayWord}</span>` + verseMarkerAfter(idx));
   }
   box.innerHTML = html.join(" ");
 }
@@ -527,8 +542,8 @@ function checkQuizAnswer(){
   let correctCount = 0;
   let htmlParts = [];
   ops.forEach(op => {
-    if(op.type === "match"){ htmlParts.push(`<span class="word-ok">${originalWords[op.origIdx]}</span>`); correctCount++; }
-    else if(op.type === "missing"){ htmlParts.push(`<span class="word-missing">${originalWords[op.origIdx]}</span>`); }
+    if(op.type === "match"){ htmlParts.push(`<span class="word-ok">${originalWords[op.origIdx]}</span>` + verseMarkerAfter(op.origIdx)); correctCount++; }
+    else if(op.type === "missing"){ htmlParts.push(`<span class="word-missing">${originalWords[op.origIdx]}</span>` + verseMarkerAfter(op.origIdx)); }
     else if(op.type === "extra"){ htmlParts.push(`<span class="word-extra">${userWords[op.userIdx]}</span>`); }
   });
 
