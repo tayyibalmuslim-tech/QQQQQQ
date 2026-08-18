@@ -414,6 +414,7 @@ function openQuiz(surah, ayah){
 
   document.getElementById("quizTitle").textContent = `تسميع ${getSurahName(surah)} - آية ${ayah}`;
   document.getElementById("quizInput").value = "";
+  document.getElementById("quizInput").style.height = "auto";
   document.getElementById("hintBox").className = "hint-box";
   document.getElementById("hintBox").textContent = "";
   document.getElementById("compareResult").innerHTML = "";
@@ -451,6 +452,7 @@ function openQuizRange(startSurah, startAyah, endSurah, endAyah){
 
   document.getElementById("quizTitle").textContent = title;
   document.getElementById("quizInput").value = "";
+  document.getElementById("quizInput").style.height = "auto";
   document.getElementById("hintBox").className = "hint-box";
   document.getElementById("hintBox").textContent = "";
   document.getElementById("compareResult").innerHTML = "";
@@ -521,10 +523,34 @@ function lastWordLength(raw){
   return m ? m[1].length : 0;
 }
 
+// تكبير صندوق الكتابة تلقائياً مع كل حرف/سطر جديد، بدل ما يفضل ثابت الحجم مع سكرول داخلي مزعج
+function autoGrowTextarea(el){
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+// خلي المكان اللي بيكتب فيه المستخدم يفضل ظاهر جوه المودال (اللي بيعمل سكرول لما المحتوى يكبر)
+function scrollQuizIntoView(){
+  const modalBox = document.querySelector("#quizModal .modal-box");
+  const liveBox = document.getElementById("liveCheckBox");
+  if(!modalBox) return;
+  // نتابع آخر عنصر فيه محتوى فعلي (صندوق التصحيح الفوري لو ظاهر، أو صندوق الكتابة)
+  const target = (liveBox && liveBox.innerHTML.trim()) ? liveBox : document.getElementById("quizInput");
+  if(target){
+    target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+function handleQuizInputChange(){
+  const input = document.getElementById("quizInput");
+  autoGrowTextarea(input);
+  scrollQuizIntoView();
+}
+
 function handleQuizInputKey(e){
   if(e.key === " " || e.key === "Spacebar"){
     // نأجل التنفيذ خطوة وحدة عشان المسافة تتسجل في value الأول
-    setTimeout(liveCheckWords, 0);
+    setTimeout(() => { liveCheckWords(); scrollQuizIntoView(); }, 0);
   }
 }
 
@@ -784,6 +810,7 @@ window.closeQuizModal = closeQuizModal;
 window.showNextWordHint = showNextWordHint;
 window.checkQuizAnswer = checkQuizAnswer;
 window.handleQuizInputKey = handleQuizInputKey;
+window.handleQuizInputChange = handleQuizInputChange;
 window.submitSelfRating = submitSelfRating;
 window.submitManualDate = submitManualDate;
 window.switchAuthTab = switchAuthTab;
