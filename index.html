@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حفظ القرآن</title>
+<style>
+  :root{
+    --paper: #EFF3EC;
+    --paper-deep: #E2E9DD;
+    --ink: #232A20;
+    --ink-soft: #5E6B57;
+    --line: #B9C7B0;
+    --teal: #2F5D50;
+    --teal-deep: #234840;
+    --gold: #9C7A2E;
+    --card: #FAFCF8;
+    --shadow: rgba(35,42,32,0.15);
+    --green-ok: #3F7A3F;
+    --red-err: #B5423A;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+
+  body{
+    background: var(--paper);
+    background-image:
+      radial-gradient(circle at 10% 10%, rgba(47,93,80,0.06), transparent 40%),
+      radial-gradient(circle at 90% 85%, rgba(156,122,46,0.06), transparent 40%);
+    color: var(--ink);
+    font-family: "Segoe UI", Tahoma, "Traditional Arabic", serif;
+    min-height: 100vh;
+    padding-bottom: 12px;
+  }
+
+  .quran-text, .quiz-input, .compare-output {
+    font-family: 'Amiri', 'Traditional Arabic', serif;
+  }
+
+  header.topbar{
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: linear-gradient(180deg, var(--teal-deep), var(--teal));
+    color: #EFF3EC;
+    padding: 8px 14px 0;
+    box-shadow: 0 3px 10px var(--shadow);
+  }
+  .topbar-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    padding-bottom: 6px;
+  }
+  header.topbar .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size: 1.15rem;
+    font-weight:700;
+    letter-spacing: 0.3px;
+  }
+  header.topbar .brand .mark{
+    width: 30px; height:30px;
+    display:flex; align-items:center; justify-content:center;
+    border: 1.5px solid #C9D9C2;
+    border-radius: 50%;
+    font-size: 15px;
+  }
+  header.topbar .actions{ display:flex; gap:10px; align-items:center; }
+  .icon-btn{
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #EFF3EC;
+    border-radius: 10px;
+    padding: 7px 12px;
+    font-size: 0.85rem;
+    cursor:pointer;
+    transition: background 0.2s;
+    font-family: inherit;
+  }
+  .icon-btn:hover{ background: rgba(255,255,255,0.18); }
+
+  .sync-status{
+    font-size: 0.72rem;
+    color: rgba(239,243,236,0.75);
+    margin-top: 2px;
+  }
+
+  .header-tabs{ display:flex; gap: 4px; }
+  .header-tabs button{
+    flex:1;
+    background: rgba(255,255,255,0.06);
+    border: none;
+    border-radius: 8px 8px 0 0;
+    padding: 7px 4px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 5px;
+    color: rgba(239,243,236,0.7);
+    font-family: inherit;
+    font-size: 0.78rem;
+    cursor:pointer;
+    position: relative;
+    transition: background 0.15s, color 0.15s;
+  }
+  .header-tabs button .ico{ font-size:0.95rem; }
+  .header-tabs button.active{
+    background: var(--paper);
+    color: var(--teal-deep);
+    font-weight:700;
+  }
+  .header-tabs button .badge{
+    background: var(--red-err); color:#fff;
+    font-size:0.62rem; min-width:15px; height:15px;
+    border-radius:8px; display:flex; align-items:center; justify-content:center;
+    padding:0 3px;
+  }
+
+  main{
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 16px 16px 30px;
+  }
+
+  .view{ display:none; }
+  .view.active{ display:block; animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  .crumbs{
+    display:flex; align-items:center; gap:8px;
+    margin-bottom: 18px;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    flex-wrap:wrap;
+  }
+  .crumbs .crumb{
+    cursor:pointer;
+    color: var(--teal-deep);
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+  }
+  .crumbs .crumb:hover{ text-decoration-color: var(--teal-deep); }
+  .crumbs .sep{ opacity:0.5; }
+  .crumbs .current{ color: var(--ink); font-weight:600; }
+
+  h1.page-title{ font-size: 1.5rem; margin: 0 0 4px; color: var(--teal-deep); }
+  p.page-sub{ color: var(--ink-soft); margin: 0 0 20px; font-size: 0.92rem; }
+
+  .grid-cards{ display:grid; gap: 12px; grid-template-columns: 1fr; }
+  .card-item{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    cursor:pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 6px rgba(35,42,32,0.06);
+  }
+  .card-item:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px var(--shadow);
+    border-color: var(--gold);
+  }
+  .card-item .title{ font-weight:700; font-size: 1.02rem; color: var(--ink); }
+  .card-item .meta{ font-size: 0.78rem; color: var(--ink-soft); margin-top:4px; }
+  .card-item .num-badge{
+    background: var(--teal);
+    color:#fff;
+    width:34px; height:34px;
+    border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.85rem;
+    flex-shrink:0;
+    margin-left: 12px;
+  }
+  .card-item .chev{ color: var(--gold); font-size:1.2rem; }
+  .card-item .row-main{ display:flex; align-items:center; flex:1; }
+  .card-item .row-actions{ display:flex; gap:6px; }
+
+  /* ===== إنشاء نطاق تسميع جديد ===== */
+  .range-form{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .range-form h3{ margin:0 0 14px; color: var(--teal-deep); font-size:1.05rem; }
+  .range-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .range-row label{
+    display:block;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  .range-row select, .range-row input{
+    width: 100%;
+    padding: 9px 10px;
+    border-radius: 9px;
+    border: 1.5px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.88rem;
+  }
+  .range-row select:focus, .range-row input:focus{ outline:none; border-color: var(--teal); }
+  .range-section-label{
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--gold);
+    margin: 14px 0 8px;
+  }
+
+  /* ===== محتوى النطاق (آيات) ===== */
+  .ayah-card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .ayah-card .ah{
+    display:flex; align-items:center; justify-content: space-between;
+    margin-bottom: 10px; flex-wrap: wrap; gap: 8px;
+  }
+  .num-pill{
+    background: var(--paper-deep);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+  }
+  .num-pill b{ color: var(--teal-deep); }
+  .ayah-card .quran-text{
+    font-size: 1.3rem;
+    line-height: 2.1;
+    color: var(--ink);
+    background: var(--paper);
+    border-right: 4px solid var(--teal);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display:none;
+    text-align: center;
+  }
+  .ayah-card .quran-text.shown{ display:block; }
+  .ayah-card .ah-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top: 10px; }
+
+  .btn{
+    font-family: inherit; border:none; border-radius: 10px;
+    padding: 8px 16px; font-size: 0.85rem; cursor:pointer;
+    transition: filter 0.15s, transform 0.1s;
+  }
+  .btn:active{ transform: scale(0.97); }
+  .btn-primary{ background: var(--teal-deep); color:#fff; }
+  .btn-primary:hover{ filter: brightness(1.15); }
+  .btn-gold{ background: var(--gold); color:#fff; }
+  .btn-gold:hover{ filter: brightness(1.1); }
+  .btn-outline{ background: transparent; border: 1.5px solid var(--teal); color: var(--teal-deep); }
+  .btn-outline:hover{ background: rgba(47,93,80,0.08); }
+  .btn-danger{ background: var(--red-err); color:#fff; }
+  .btn-sm{ padding: 5px 12px; font-size:0.78rem; }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .btn-block{ width:100%; }
+
+  /* ===== Quiz modal ===== */
+  .modal-overlay{
+    position: fixed; inset:0; background: rgba(35,42,32,0.55);
+    display:none; align-items:center; justify-content:center;
+    z-index: 100; padding: 16px;
+  }
+  .modal-overlay.active{ display:flex; }
+  .modal-box{
+    background: var(--card); border-radius: 16px; max-width: 640px; width:100%;
+    max-height: 88vh; overflow-y:auto; padding: 22px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  }
+  .modal-box h3{ margin:0 0 14px; color: var(--teal-deep); font-size: 1.15rem; }
+  .quiz-input{
+    width:100%; min-height: 120px; font-size: 1.25rem; line-height: 1.9;
+    padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px;
+    resize: vertical; font-family: inherit; background: var(--paper); color: var(--ink);
+    text-align: center;
+  }
+  .quiz-input:focus{ outline:none; border-color: var(--teal); }
+
+  .compare-output{
+    font-size: 1.3rem; line-height: 2.2; padding: 14px 16px;
+    background: var(--paper); border-radius: 10px; border: 1px solid var(--line);
+    margin-top: 12px; text-align: center;
+  }
+  .word-ok{ color: var(--green-ok); font-weight:600; }
+  .word-missing{ color: var(--red-err); opacity:0.6; }
+  .word-extra{ color: var(--ink-soft); text-decoration: line-through; opacity:0.6; }
+  .compare-percentage{ margin-top: 8px; font-size: 0.88rem; color: var(--ink-soft); text-align:center; }
+  .compare-legend{
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
+    font-size: 0.8rem; color: var(--ink-soft);
+  }
+
+  .modal-actions{ display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .hint-box{
+    margin-top:10px; font-size:0.9rem; color: var(--ink-soft);
+    background: var(--paper-deep); border-radius: 8px; padding: 8px 12px;
+    display:none; text-align:center;
+  }
+  .hint-box.shown{ display:block; }
+
+  .self-rate{
+    display:none; margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--line);
+  }
+  .self-rate.shown{ display:block; }
+  .self-rate p{ margin: 0 0 10px; font-size:0.92rem; color:var(--ink-soft); }
+  .rate-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .rate-btn{
+    padding: 10px 8px; border-radius: 10px; border: 1.5px solid var(--line);
+    background: var(--card); cursor:pointer; font-family: inherit;
+    font-size: 0.88rem; text-align:center; transition: all 0.15s;
+  }
+  .rate-btn small{ display:block; font-size:0.72rem; color:var(--ink-soft); margin-top:2px; }
+  .rate-btn.excellent:hover{ background:#E4F0E0; border-color:var(--green-ok); }
+  .rate-btn.good:hover{ background:#E7EFE2; border-color:var(--teal); }
+  .rate-btn.medium:hover{ background:#F1E9D4; border-color:var(--gold); }
+  .rate-btn.bad:hover{ background:#F5E1DD; border-color:var(--red-err); }
+
+  .manual-date-row{ display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  .manual-date-row input[type="date"]{
+    padding: 7px 10px; border-radius: 8px; border: 1.5px solid var(--line);
+    font-family: inherit; background: var(--paper);
+  }
+
+  /* ===== Review tab ===== */
+  .review-summary{ display:flex; gap:12px; margin-bottom: 20px; flex-wrap:wrap; }
+  .stat-box{
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 20px; text-align:center; flex:1; min-width: 100px;
+  }
+  .stat-box .num{ font-size:1.6rem; font-weight:700; color: var(--teal-deep); }
+  .stat-box .lbl{ font-size:0.78rem; color:var(--ink-soft); margin-top:2px; }
+  .stat-box.overdue .num{ color: var(--red-err); }
+
+  .review-item{
+    background: var(--card); border: 1px solid var(--line); border-right: 4px solid var(--teal);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+    display:flex; justify-content: space-between; align-items:center;
+    gap: 10px; flex-wrap: wrap; cursor:pointer;
+  }
+  .review-item.overdue{ border-right-color: var(--red-err); }
+  .review-item .info .title{ font-weight:700; font-size:0.95rem; }
+  .review-item .info .sub{ font-size:0.78rem; color:var(--ink-soft); margin-top:3px; }
+  .review-item .due-tag{
+    font-size:0.75rem; padding: 4px 10px; border-radius: 14px;
+    background: var(--paper-deep); color: var(--ink-soft); white-space:nowrap;
+  }
+  .review-item.overdue .due-tag{ background: #F5E1DD; color: var(--red-err); font-weight:700; }
+  .review-item.today .due-tag{ background: #E4F0E0; color: var(--teal-deep); font-weight:700; }
+
+  .empty-state{ text-align:center; padding: 50px 20px; color: var(--ink-soft); }
+  .empty-state .emoji{ font-size:2.4rem; margin-bottom:10px; }
+
+  /* ===== Auth ===== */
+  .auth-box{
+    max-width: 380px; margin: 40px auto; background: var(--card);
+    border: 1px solid var(--line); border-radius: 16px; padding: 28px 24px; text-align:center;
+  }
+  .auth-box h2{ color:var(--teal-deep); margin-top:0; }
+  .auth-box input{
+    width:100%; padding: 10px 14px; margin-bottom: 10px;
+    border: 1.5px solid var(--line); border-radius: 10px;
+    font-family: inherit; font-size: 0.95rem; background: var(--paper); color: var(--ink);
+  }
+  .auth-box input:focus{ outline:none; border-color: var(--teal); }
+  .auth-tabs{ display:flex; gap:8px; margin-bottom:18px; }
+  .auth-tabs button{
+    flex:1; padding:8px; border-radius:10px; border:1.5px solid var(--line);
+    background: var(--paper); cursor:pointer; font-family:inherit; color: var(--ink-soft);
+  }
+  .auth-tabs button.active{ background: var(--teal-deep); color:#fff; border-color:var(--teal-deep); }
+  .auth-msg{ font-size:0.82rem; margin-top:10px; min-height:18px; }
+  .auth-msg.err{ color: var(--red-err); }
+  .auth-msg.ok{ color: var(--green-ok); }
+
+  .toast{
+    position: fixed; bottom: 20px; right: 20px; background: var(--teal-deep); color:#fff;
+    padding: 12px 18px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    z-index: 200; font-size: 0.88rem; opacity:0; transform: translateY(10px);
+    transition: all 0.25s; max-width: 300px;
+  }
+  .toast.show{ opacity:1; transform:none; }
+  .toast.err{ background: var(--red-err); }
+
+  @media (max-width: 520px){
+    main{ padding: 16px 10px 40px; }
+    .ayah-card .quran-text{ font-size: 1.15rem; }
+    .range-row{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <div class="brand">
+      <span class="mark">🌙</span>
+      <div>
+        <span class="txt">حفظ القرآن</span>
+        <div class="sync-status" id="syncStatus">غير مسجّل دخول</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" id="authBtn" onclick="window.showAuthView()">دخول</button>
+    </div>
+  </div>
+  <div class="header-tabs">
+    <button class="active" id="nav-ranges" onclick="window.switchTab('ranges')">
+      <span class="ico">📖</span> نطاقاتي
+    </button>
+    <button id="nav-review" onclick="window.switchTab('review')">
+      <span class="ico">🔁</span> المراجعة
+      <span class="badge" id="reviewBadge" style="display:none;">0</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ Ranges List View ============ -->
+  <section class="view active" id="view-ranges">
+    <h1 class="page-title">نطاقات التسميع</h1>
+    <p class="page-sub">أنشئ نطاقاً جديداً أو تابع نطاقاً موجوداً</p>
+
+    <div class="range-form">
+      <h3>➕ إنشاء نطاق تسميع جديد</h3>
+      <div class="range-section-label">من</div>
+      <div class="range-row">
+        <div>
+          <label>السورة</label>
+          <select id="startSurah"></select>
+        </div>
+        <div>
+          <label>رقم الآية</label>
+          <input type="number" id="startAyah" min="1" value="1">
+        </div>
+      </div>
+      <div class="range-section-label">إلى</div>
+      <div class="range-row">
+        <div>
+          <label>السورة</label>
+          <select id="endSurah"></select>
+        </div>
+        <div>
+          <label>رقم الآية</label>
+          <input type="number" id="endAyah" min="1" value="1">
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="window.createRange()">إنشاء النطاق</button>
+    </div>
+
+    <div id="rangesList" class="grid-cards"></div>
+  </section>
+
+  <!-- ============ Range Content View ============ -->
+  <section class="view" id="view-range-content">
+    <div class="crumbs">
+      <span class="crumb" onclick="window.goToRanges()">نطاقاتي</span>
+      <span class="sep">/</span>
+      <span class="current" id="crumbRange"></span>
+    </div>
+    <h1 class="page-title" id="rangeContentTitle"></h1>
+    <div id="ayahsContainer"></div>
+  </section>
+
+  <!-- ============ Review Due View ============ -->
+  <section class="view" id="view-review">
+    <h1 class="page-title">المستحقة للمراجعة</h1>
+    <p class="page-sub">الآيات اللي حان وقت مراجعتها، مرتبة بالأولوية</p>
+    <div class="review-summary" id="reviewSummary"></div>
+    <div id="reviewList"></div>
+  </section>
+
+  <!-- ============ Auth View ============ -->
+  <section class="view" id="view-auth">
+    <div class="auth-box">
+      <h2>مزامنة الحساب</h2>
+      <div class="auth-tabs">
+        <button class="active" id="tabLogin" onclick="window.switchAuthTab('login')">تسجيل الدخول</button>
+        <button id="tabSignup" onclick="window.switchAuthTab('signup')">حساب جديد</button>
+      </div>
+      <input type="email" id="authEmail" placeholder="البريد الإلكتروني" autocomplete="email">
+      <input type="password" id="authPassword" placeholder="كلمة المرور" autocomplete="current-password">
+      <button class="btn btn-primary btn-block" id="authSubmitBtn" onclick="window.submitAuth()">تسجيل الدخول</button>
+      <div class="auth-msg" id="authMsg"></div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-outline btn-sm btn-block" id="logoutBtn" onclick="window.doLogout()" style="display:none;">تسجيل الخروج</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ Quiz Modal ============ -->
+<div class="modal-overlay" id="quizModal">
+  <div class="modal-box">
+    <h3 id="quizTitle">تسميع الآية</h3>
+    <textarea class="quiz-input" id="quizInput" placeholder="اكتب الآية هنا بدون تشكيل..." dir="rtl"></textarea>
+    <div class="hint-box" id="hintBox"></div>
+    <div class="modal-actions">
+      <button class="btn btn-gold btn-sm" onclick="window.showNextWordHint()">الكلمة التالية 💡</button>
+      <button class="btn btn-primary" onclick="window.checkQuizAnswer()">تحقق ✓</button>
+      <button class="btn btn-outline btn-sm" onclick="window.closeQuizModal()">إغلاق</button>
+    </div>
+    <div id="compareResult"></div>
+
+    <div class="self-rate" id="selfRateBox">
+      <p>قيّم نفسك في هذا التسميع:</p>
+      <div class="rate-grid">
+        <button class="rate-btn excellent" onclick="window.submitSelfRating('excellent')">ممتاز<small>+١٠ أيام</small></button>
+        <button class="rate-btn good" onclick="window.submitSelfRating('good')">جيد<small>+٥ أيام</small></button>
+        <button class="rate-btn medium" onclick="window.submitSelfRating('medium')">متوسط<small>+٢ أيام</small></button>
+        <button class="rate-btn bad" onclick="window.submitSelfRating('bad')">سيء<small>−٢ أيام</small></button>
+      </div>
+      <div class="manual-date-row">
+        <label style="font-size:0.82rem;color:var(--ink-soft);">أو سجّل تاريخ مراجعة يدوي:</label>
+        <input type="date" id="manualReviewDate">
+        <button class="btn btn-outline btn-sm" onclick="window.submitManualDate()">تسجيل</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="data/quran-data.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
