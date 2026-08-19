@@ -610,7 +610,7 @@ function handleQuizInputChange(){
     renderLiveCheckBox();
   }
   // مفيش تدخل يدوي في سكرول صندوق الكتابة — المتصفح بيتابع الكيرسر تلقائياً،
-  // والـ padding-bottom الكبير في CSS (.quiz-input) بيخلي آخر سطر يفضل حوالين منتصف الصندوق مش لازق في القاع
+  // والـ padding-bottom الصغير (سطرين) في CSS (.quiz-input) بيخلي الكتابة تنتقل قبل نهاية الصندوق بشوية، مش بالظبط عند حافته
 }
 
 function handleQuizInputKey(e){
