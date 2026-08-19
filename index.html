@@ -327,7 +327,9 @@
     flex: 2 1 0;            /* الثلثين للكتابة */
     min-height: 0;          /* ضروري عشان السكرول الداخلي يشتغل */
     width:100%; font-size: 1.25rem; line-height: 1.9;
-    padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 12px 14px;
+    padding-bottom: calc(12px + 3.8em); /* فراغ صغير بمقدار سطرين تقريباً، عشان الانتقال يحصل قبل نهاية الصندوق مش بالظبط عنده */
+    border: 1.5px solid var(--line); border-radius: 10px;
     resize: none; overflow-y: auto; font-family: inherit; background: var(--paper); color: var(--ink);
     text-align: center;
   }
