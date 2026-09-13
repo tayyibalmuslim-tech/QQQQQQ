@@ -177,7 +177,10 @@
     font-size: calc(1.35rem * var(--qscale));
     text-align:justify;
   }
-  .ayah-block{ display:inline; }
+  .ayah-block{
+    display:inline-block;
+    contain: layout style;
+  }
   .ayah-num-badge{
     display:inline-flex;
     align-items:center; justify-content:center;
@@ -205,12 +208,11 @@
     border-radius:8px;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
-    padding: 2px 3px;
+    box-shadow: 0 0 0 3px var(--hl-ayah);
   }
   .w.cur-word{
     background: var(--hl-word);
     box-shadow: 0 0 0 2px var(--hl-word-ring);
-    font-weight:700;
   }
   body.mask-ahead .w.future{
     filter: blur(6px);
