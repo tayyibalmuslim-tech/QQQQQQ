@@ -116,25 +116,51 @@
   .sync-dot.on{ background:#8FE0A8; }
   .sync-dot.err{ background:#E39B8F; }
 
-  /* -------- Jump bar -------- */
-  .jump-bar{
+  /* -------- مكاني في السورة + الانتقال السريع (مدموجين في شريط واحد) -------- */
+  .place-bar{
     flex:0 0 auto;
-    display:flex; gap:8px; padding:10px 12px;
-    background: var(--surface-soft);
-    border-bottom:1px solid var(--line);
-    align-items:center;
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 10px var(--shadow);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    margin: 0 12px calc(10px + env(safe-area-inset-bottom));
+    text-align:center;
   }
-  .jump-bar select{
+  .place-text{
+    font-size:0.84rem;
+    color: var(--ink-soft);
+    font-weight:600;
+    margin-bottom:6px;
+  }
+  .place-progress{
+    height:5px;
+    border-radius:99px;
+    background: var(--bg-deep);
+    overflow:hidden;
+    margin-bottom:10px;
+  }
+  .place-progress-fill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    border-radius:99px;
+    transition: width .25s;
+  }
+  .jump-row{
+    display:flex; gap:8px; align-items:center;
+  }
+  .jump-row select{
     flex:1;
     padding:9px 8px;
     border-radius:10px;
     border:1px solid var(--line);
-    background: var(--surface);
+    background: var(--surface-soft);
     color: var(--ink);
     font-family:inherit;
     font-size:0.86rem;
   }
-  .jump-bar button{
+  .jump-row button{
     flex:0 0 auto;
     background: var(--accent);
     color:#fff;
@@ -145,7 +171,7 @@
     font-size:0.84rem;
     cursor:pointer;
   }
-  .jump-bar button:active{ background: var(--accent-deep); }
+  .jump-row button:active{ background: var(--accent-deep); }
 
   /* -------- Reading pane -------- */
   main.container{
@@ -241,36 +267,6 @@
     background: rgba(169,130,46,0.12);
   }
 
-  /* -------- مكاني في السورة -------- */
-  .place-bar{
-    flex:0 0 auto;
-    background: var(--surface);
-    border:1px solid var(--line);
-    border-radius: var(--radius);
-    box-shadow: 0 2px 10px var(--shadow);
-    padding: 9px 14px;
-    text-align:center;
-  }
-  .place-text{
-    font-size:0.84rem;
-    color: var(--ink-soft);
-    font-weight:600;
-    margin-bottom:6px;
-  }
-  .place-progress{
-    height:5px;
-    border-radius:99px;
-    background: var(--bg-deep);
-    overflow:hidden;
-  }
-  .place-progress-fill{
-    height:100%;
-    width:0%;
-    background: linear-gradient(90deg, var(--accent), var(--gold));
-    border-radius:99px;
-    transition: width .25s;
-  }
-
   /* -------- أزرار الوسط (تسجيل خطأ / ملاحظة) -------- */
   .mid-btn{
     flex:0 0 56px;
@@ -293,7 +289,7 @@
   /* -------- Nav controls -------- */
   nav.nav-controls{
     flex:0 0 auto;
-    padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 8px 12px 10px;
     background: var(--surface-soft);
     border-top:1px solid var(--line);
     display:flex;
@@ -393,11 +389,6 @@
     <div class="surah-heading" id="surahHeading">—</div>
     <div class="ayahs-flow" id="ayahsFlow"></div>
   </div>
-
-  <div class="place-bar">
-    <div class="place-text" id="positionIndicator">—</div>
-    <div class="place-progress"><div class="place-progress-fill" id="placeProgressFill"></div></div>
-  </div>
 </main>
 
 <nav class="nav-controls">
@@ -425,10 +416,14 @@
   </div>
 </nav>
 
-<div class="jump-bar">
-  <select id="jumpSurah"></select>
-  <select id="jumpAyah"></select>
-  <button onclick="window.doJump()">اذهب</button>
+<div class="place-bar">
+  <div class="place-text" id="positionIndicator">—</div>
+  <div class="place-progress"><div class="place-progress-fill" id="placeProgressFill"></div></div>
+  <div class="jump-row">
+    <select id="jumpSurah"></select>
+    <select id="jumpAyah"></select>
+    <button onclick="window.doJump()">اذهب</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
