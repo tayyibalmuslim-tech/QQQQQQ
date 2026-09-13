@@ -1,8 +1,8 @@
 // ============================================================
-// حفظ القرآن - المنطق الرئيسي
+// مصحف التنقل - حفظ القرآن بالتنقل الحر (كلمة / آية) بدون كتابة
 // ============================================================
 
-// ---------- Firebase Setup (تحميل اختياري، ما يوقفش باقي التطبيق لو فشل) ----------
+// ---------- Firebase (اختياري، لمزامنة الموضع فقط بين الأجهزة) ----------
 const firebaseConfig = {
   apiKey: "AIzaSyD8jxpVrvicStETloL8tk5s865dmNatIqE",
   authDomain: "mazen-productivity-bab1c.firebaseapp.com",
@@ -14,12 +14,7 @@ const firebaseConfig = {
   measurementId: "G-LCMB1W8DW9"
 };
 
-let auth = null;
-let db = null;
-let fbReady = false;
-let currentUser = null;
-let authMode = "login";
-let fbFns = {};
+let auth = null, db = null, fbReady = false, currentUser = null, authMode = "login", fbFns = {};
 
 async function initFirebase(){
   try{
@@ -39,765 +34,278 @@ async function initFirebase(){
       ref: dbMod.ref, set: dbMod.set, get: dbMod.get
     };
     fbReady = true;
-
     fbFns.onAuthStateChanged(auth, (user) => {
       currentUser = user;
-      const authBtn = document.getElementById("authBtn");
-      const logoutBtn = document.getElementById("logoutBtn");
-      const syncStatus = document.getElementById("syncStatus");
-
-      if(user){
-        authBtn.textContent = user.email;
-        logoutBtn.style.display = "block";
-        syncStatus.textContent = "متزامن ✓ — " + user.email;
-        loadCloudData(user.uid);
-      } else {
-        authBtn.textContent = "دخول";
-        logoutBtn.style.display = "none";
-        syncStatus.textContent = "غير مسجّل دخول";
-      }
+      setSyncDot(user ? "on" : "off");
+      document.getElementById("userLine").textContent = user ? ("مسجّل الدخول: " + user.email) : "";
+      if(user) loadCloudPosition(user.uid);
     });
   }catch(err){
     console.error("فشل تحميل Firebase:", err);
-    const syncStatus = document.getElementById("syncStatus");
-    if(syncStatus) syncStatus.textContent = "المزامنة غير متاحة الآن";
-    showToast("تعذّر الاتصال بخدمة المزامنة، التطبيق شغال بالبيانات المحلية", true);
+    setSyncDot("err");
   }
 }
 
-// ---------- App State ----------
-// ranges[rangeId] = { id, startSurah, startAyah, endSurah, endAyah, createdAt }
-// progress[verseKey] = { lastReviewDate, nextReviewDate, intervalDays, history: [] }
-let ranges = [];
-let progress = {};
-let activeQuiz = null;
-
-const LOCAL_RANGES_KEY = "quran_app_ranges_v1";
-const LOCAL_PROGRESS_KEY = "quran_app_progress_v1";
-
-function verseKey(surah, ayah){
-  return `${surah}:${ayah}`;
+function setSyncDot(state){
+  const dot = document.getElementById("syncDot");
+  dot.className = "sync-dot" + (state === "on" ? " on" : state === "err" ? " err" : "");
 }
 
-function loadLocalData(){
-  try{
-    const rawRanges = localStorage.getItem(LOCAL_RANGES_KEY);
-    ranges = rawRanges ? JSON.parse(rawRanges) : [];
-  }catch(e){ ranges = []; }
-  try{
-    const rawProgress = localStorage.getItem(LOCAL_PROGRESS_KEY);
-    progress = rawProgress ? JSON.parse(rawProgress) : {};
-  }catch(e){ progress = {}; }
-}
-function saveLocalRanges(){ localStorage.setItem(LOCAL_RANGES_KEY, JSON.stringify(ranges)); }
-function saveLocalProgress(){ localStorage.setItem(LOCAL_PROGRESS_KEY, JSON.stringify(progress)); }
+// ---------- الموضع الحالي ----------
+// pos = { surah, ayah, w } حيث w = فهرس الكلمة داخل الآية (يبدأ من صفر)
+let pos = { surah: 1, ayah: 1, w: 0 };
+let renderedSurah = null;
+let saveTimer = null;
 
+const POS_KEY = "navq_position_v1";
+const THEME_KEY = "navq_theme_v1";
+const FONT_KEY = "navq_fontsize_v1";
+
+function tokenize(text){ return text.trim().split(/\s+/).filter(Boolean); }
+
+function getSurahName(num){
+  const s = QURAN_SURAHS_LIST.find(s => s.number === num);
+  return s ? s.name : ("سورة " + num);
+}
+function getSurahTotalVerses(num){
+  const s = QURAN_SURAHS_LIST.find(s => s.number === num);
+  return s ? s.totalVerses : 0;
+}
+function getVerseText(surah, ayah){
+  const verses = QURAN_VERSES_DATA[String(surah)];
+  if(!verses) return null;
+  const v = verses.find(v => v.number === ayah);
+  return v ? v.text : null;
+}
+function toArabicDigits(num){
+  const d = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
+  return String(num).split("").map(c => d[c] || c).join("");
+}
+
+// ---------- تخزين محلي وسحابي ----------
+function loadLocalPosition(){
+  try{
+    const raw = localStorage.getItem(POS_KEY);
+    if(raw){
+      const p = JSON.parse(raw);
+      if(p && p.surah && p.ayah){ pos = { surah: p.surah, ayah: p.ayah, w: p.w || 0 }; }
+    }
+  }catch(e){ /* تجاهل */ }
+}
+function saveLocalPosition(){
+  localStorage.setItem(POS_KEY, JSON.stringify(pos));
+}
 function saveToCloud(){
-  saveLocalRanges();
-  saveLocalProgress();
   if(currentUser && fbReady){
-    fbFns.set(fbFns.ref(db, `quranApp/${currentUser.uid}`), { ranges, progress })
-      .catch(err => showToast("خطأ في المزامنة: " + err.message, true));
+    fbFns.set(fbFns.ref(db, `navApp/${currentUser.uid}/position`), pos)
+      .catch(err => showToast("تعذّرت المزامنة: " + err.message, true));
   }
 }
-
-function loadCloudData(uid){
-  if(!fbReady) return;
-  return fbFns.get(fbFns.ref(db, `quranApp/${uid}`)).then(snap => {
+function persistPosition(){
+  saveLocalPosition();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveToCloud, 700);
+}
+function loadCloudPosition(uid){
+  fbFns.get(fbFns.ref(db, `navApp/${uid}/position`)).then(snap => {
     if(snap.exists()){
-      const cloud = snap.val();
-      ranges = cloud.ranges || [];
-      progress = cloud.progress || {};
-      saveLocalRanges();
-      saveLocalProgress();
-    } else if(ranges.length > 0 || Object.keys(progress).length > 0){
-      fbFns.set(fbFns.ref(db, `quranApp/${uid}`), { ranges, progress });
-    }
-    renderCurrentView();
-  }).catch(err => {
-    showToast("تعذّر تحميل بيانات المزامنة: " + err.message, true);
-  });
-}
-
-// ---------- Navigation (History API) ----------
-let currentTab = "ranges";
-let currentRangeId = null;
-
-function updateTabButtons(tab){
-  document.querySelectorAll(".header-tabs button").forEach(b => b.classList.remove("active"));
-  const btn = document.getElementById("nav-" + tab);
-  if(btn) btn.classList.add("active");
-}
-
-function applyState(state, push){
-  currentTab = (state.view === "review") ? "review" : "ranges";
-  updateTabButtons(currentTab);
-
-  if(state.view === "ranges"){
-    showView("view-ranges");
-    renderRangesList();
-  } else if(state.view === "range-content"){
-    currentRangeId = state.rangeId;
-    const range = ranges.find(r => r.id === currentRangeId);
-    if(!range){ applyState({view:"ranges"}, false); return; }
-    document.getElementById("crumbRange").textContent = rangeLabel(range);
-    document.getElementById("rangeContentTitle").textContent = rangeLabel(range);
-    renderAyahs(range);
-    showView("view-range-content");
-  } else if(state.view === "review"){
-    showView("view-review");
-    renderReviewTab();
-  } else if(state.view === "auth"){
-    showView("view-auth");
-  }
-
-  if(push){
-    history.pushState(state, "", "#" + stateToHash(state));
-  }
-}
-
-function stateToHash(state){
-  if(state.view === "ranges") return "ranges";
-  if(state.view === "range-content") return "range/" + state.rangeId;
-  if(state.view === "review") return "review";
-  if(state.view === "auth") return "auth";
-  return "ranges";
-}
-
-function hashToState(hash){
-  const parts = hash.replace(/^#/, "").split("/");
-  if(parts[0] === "range" && parts[1] !== undefined) return { view: "range-content", rangeId: parts[1] };
-  if(parts[0] === "review") return { view: "review" };
-  if(parts[0] === "auth") return { view: "auth" };
-  return { view: "ranges" };
-}
-
-window.addEventListener("popstate", (e) => {
-  const state = e.state || hashToState(location.hash);
-  applyState(state, false);
-});
-
-function switchTab(tab){
-  if(tab === "ranges") applyState({ view: "ranges" }, true);
-  else if(tab === "review") applyState({ view: "review" }, true);
-}
-
-function showView(id){
-  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-}
-
-function goToRanges(){ applyState({ view: "ranges" }, true); }
-function showAuthView(){ applyState({ view: "auth" }, true); }
-
-function renderCurrentView(){
-  const state = hashToState(location.hash);
-  applyState(state, false);
-  updateReviewBadge();
-}
-
-// ---------- Ranges ----------
-function rangeLabel(range){
-  const sName = getSurahName(range.startSurah);
-  const eName = getSurahName(range.endSurah);
-  if(range.startSurah === range.endSurah){
-    return `${sName} (${range.startAyah}-${range.endAyah})`;
-  }
-  return `${sName}:${range.startAyah} → ${eName}:${range.endAyah}`;
-}
-
-function populateSurahSelects(){
-  const startSel = document.getElementById("startSurah");
-  const endSel = document.getElementById("endSurah");
-  const options = QURAN_SURAHS_LIST.map(s => `<option value="${s.number}">${s.number}. ${s.name}</option>`).join("");
-  startSel.innerHTML = options;
-  endSel.innerHTML = options;
-  // افتراضياً سورة القمر (٥٤) كتجربة أولى
-  startSel.value = "54";
-  endSel.value = "54";
-  document.getElementById("startAyah").value = 1;
-  document.getElementById("endAyah").value = getSurahTotalVerses(54);
-}
-
-function createRange(){
-  const startSurah = Number(document.getElementById("startSurah").value);
-  const startAyah = Number(document.getElementById("startAyah").value);
-  const endSurah = Number(document.getElementById("endSurah").value);
-  const endAyah = Number(document.getElementById("endAyah").value);
-
-  if(!startSurah || !startAyah || !endSurah || !endAyah){
-    showToast("من فضلك املأ كل الحقول", true);
-    return;
-  }
-  if(endSurah < startSurah || (endSurah === startSurah && endAyah < startAyah)){
-    showToast("نهاية النطاق لازم تكون بعد بدايته", true);
-    return;
-  }
-  const startMax = getSurahTotalVerses(startSurah);
-  const endMax = getSurahTotalVerses(endSurah);
-  if(startAyah < 1 || startAyah > startMax){
-    showToast(`سورة ${getSurahName(startSurah)} فيها ${startMax} آية بس`, true);
-    return;
-  }
-  if(endAyah < 1 || endAyah > endMax){
-    showToast(`سورة ${getSurahName(endSurah)} فيها ${endMax} آية بس`, true);
-    return;
-  }
-
-  // التأكد إن النص متاح فعلاً لكل سور النطاق (حالياً القرآن مضاف تدريجياً)
-  for(let s = startSurah; s <= endSurah; s++){
-    if(!QURAN_VERSES_DATA[String(s)]){
-      showToast(`نص سورة ${getSurahName(s)} مش متاح في التطبيق لسه`, true);
-      return;
-    }
-  }
-
-  const newRange = {
-    id: "r" + Date.now(),
-    startSurah, startAyah, endSurah, endAyah,
-    createdAt: todayStr()
-  };
-  ranges.push(newRange);
-  saveToCloud();
-  showToast("تم إنشاء النطاق ✓");
-  renderRangesList();
-}
-
-function deleteRange(rangeId, event){
-  if(event) event.stopPropagation();
-  ranges = ranges.filter(r => r.id !== rangeId);
-  saveToCloud();
-  renderRangesList();
-  showToast("تم حذف النطاق");
-}
-
-function renderRangesList(){
-  const wrap = document.getElementById("rangesList");
-  wrap.innerHTML = "";
-
-  if(ranges.length === 0){
-    wrap.innerHTML = `
-      <div class="empty-state">
-        <div class="emoji">📖</div>
-        <div>لسه مفيش نطاقات تسميع، أنشئ أول نطاق من الفورم فوق</div>
-      </div>
-    `;
-    return;
-  }
-
-  ranges.forEach(range => {
-    const verses = getVersesInRange(range.startSurah, range.startAyah, range.endSurah, range.endAyah);
-    const dueCount = verses.filter(v => isDue(verseKey(v.surah, v.ayah))).length;
-
-    const el = document.createElement("div");
-    el.className = "card-item";
-    el.onclick = () => openRange(range.id);
-    el.innerHTML = `
-      <div class="row-main">
-        <div class="num-badge">📖</div>
-        <div>
-          <div class="title">${rangeLabel(range)}</div>
-          <div class="meta">${verses.length} آية${dueCount > 0 ? ` · <span style="color:var(--red-err);font-weight:700;">${dueCount} مستحقة للمراجعة</span>` : ""}</div>
-        </div>
-      </div>
-      <div class="row-actions">
-        <button class="btn btn-outline btn-sm" onclick="window.deleteRange('${range.id}', event)">حذف</button>
-        <span class="chev">‹</span>
-      </div>
-    `;
-    wrap.appendChild(el);
-  });
-}
-
-function openRange(rangeId){
-  applyState({ view: "range-content", rangeId }, true);
-}
-
-function toggleAyahText(btn, safeKey){
-  document.getElementById("ayahText-" + safeKey).classList.toggle("shown");
-}
-
-function renderAyahs(range){
-  const wrap = document.getElementById("ayahsContainer");
-  wrap.innerHTML = "";
-  const verses = getVersesInRange(range.startSurah, range.startAyah, range.endSurah, range.endAyah);
-
-  const quizAllBox = document.getElementById("rangeQuizAllBox");
-  if(quizAllBox){
-    if(verses.length > 1){
-      quizAllBox.innerHTML = `
-        <button class="btn btn-primary" style="width:100%;margin-bottom:14px;"
-          onclick="window.openQuizRange(${range.startSurah}, ${range.startAyah}, ${range.endSurah}, ${range.endAyah})">
-          تسميع الفقرة كاملة (كقطعة واحدة) ✍️📖
-        </button>`;
+      const p = snap.val();
+      if(p && p.surah && p.ayah){
+        pos = { surah: p.surah, ayah: p.ayah, w: p.w || 0 };
+        saveLocalPosition();
+        renderSurah(pos.surah);
+        highlightCurrent(true);
+        showToast("تم استرجاع آخر موضع محفوظ ✓");
+      }
     } else {
-      quizAllBox.innerHTML = "";
+      saveToCloud();
     }
+  }).catch(err => showToast("تعذّر تحميل موضعك المحفوظ: " + err.message, true));
+}
+
+// ---------- بناء قوائم الاختيار ----------
+function populateSurahSelect(){
+  const sel = document.getElementById("jumpSurah");
+  sel.innerHTML = QURAN_SURAHS_LIST.map(s => `<option value="${s.number}">${s.number}. ${s.name}</option>`).join("");
+  sel.value = String(pos.surah);
+  sel.onchange = () => populateAyahSelect(Number(sel.value));
+  populateAyahSelect(pos.surah);
+}
+function populateAyahSelect(surahNum){
+  const sel = document.getElementById("jumpAyah");
+  const total = getSurahTotalVerses(surahNum);
+  let opts = "";
+  for(let a = 1; a <= total; a++){ opts += `<option value="${a}">آية ${a}</option>`; }
+  sel.innerHTML = opts;
+  sel.value = String(surahNum === pos.surah ? pos.ayah : 1);
+}
+
+// ---------- رسم آيات السورة الحالية ----------
+function renderSurah(surahNum){
+  const verses = QURAN_VERSES_DATA[String(surahNum)];
+  const flow = document.getElementById("ayahsFlow");
+  flow.innerHTML = "";
+  document.getElementById("surahHeading").textContent = `سورة ${getSurahName(surahNum)}`;
+
+  if(!verses){
+    flow.innerHTML = `<div style="text-align:center;color:var(--ink-soft);">نص هذه السورة غير متاح حاليًا</div>`;
+    renderedSurah = surahNum;
+    return;
   }
 
   verses.forEach(v => {
-    const key = verseKey(v.surah, v.ayah);
-    const safeKey = key.replace(/[^a-zA-Z0-9]/g,'_');
-    const text = getVerseText(v.surah, v.ayah);
-    const prog = progress[key];
-    const due = isDue(key);
+    const ayahSpan = document.createElement("span");
+    ayahSpan.className = "ayah-block";
+    ayahSpan.dataset.ayah = v.number;
 
-    const card = document.createElement("div");
-    card.className = "ayah-card";
-    card.innerHTML = `
-      <div class="ah">
-        <div class="nums">
-          <span class="num-pill">${getSurahName(v.surah)} <b>${v.ayah}</b></span>
-        </div>
-        ${due ? `<span class="num-pill" style="background:#F5E1DD;color:var(--red-err);font-weight:700;">مستحقة للمراجعة</span>` : ""}
-      </div>
-      <div class="quran-text" id="ayahText-${safeKey}">${text}</div>
-      <div class="ah-actions">
-        <button class="btn btn-outline btn-sm" onclick="window.toggleAyahText(this,'${safeKey}')">إظهار / إخفاء الآية</button>
-        <button class="btn btn-primary btn-sm" onclick="window.openQuiz(${v.surah}, ${v.ayah})">تسميع (كتابة) ✍️</button>
-      </div>
-      ${prog ? `<div class="meta" style="margin-top:10px;font-size:0.76rem;color:var(--ink-soft);">
-          آخر مراجعة: ${prog.lastReviewDate || "—"} · المراجعة القادمة: ${prog.nextReviewDate || "—"}
-        </div>` : ""}
-    `;
-    wrap.appendChild(card);
-  });
-}
-
-// ---------- Arabic text normalization for comparison ----------
-function stripDiacritics(text){
-  return text
-    .replace(/ى\u0670/g, "ى") // الألف الخنجرية اللي فوق الألف المقصورة (زي في "الهدى") تتشال بس، لأنها جزء بصري من نفس الحرف مش صوت إضافي
-    .replace(/\u0670/g, "ا") // أي ألف خنجرية تانية (فوق حروف زي الحاء في "الرحمن") نعتبرها ألف عادية، لأنها مش موجودة في لوحة المفاتيح العادية
-    .replace(/[\u064B-\u065F\u06D6-\u06ED\u08F0-\u08FF]/g, "") // باقي علامات التشكيل تتشال عادي
-    .replace(/ـ/g, "")
-    .replace(/[،.,؛:؟!"'«»()"]/g, "")
-    .replace(/[إأآاٱ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/ؤ/g, "و")
-    .replace(/ئ/g, "ي")
-    .replace(/[\u06DD\u06DE\u08E2۞]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-function normalizeForCompare(text){ return stripDiacritics(text).toLowerCase(); }
-function tokenize(text){ return text.split(/\s+/).filter(Boolean); }
-
-// ---------- LCS-based word alignment ----------
-function lcsAlign(origWords, origNorm, userNorm){
-  const n = origNorm.length, m = userNorm.length;
-  const dp = Array.from({length: n+1}, () => new Uint16Array(m+1));
-  for(let i = n-1; i >= 0; i--){
-    for(let j = m-1; j >= 0; j--){
-      if(origNorm[i] === userNorm[j]) dp[i][j] = dp[i+1][j+1] + 1;
-      else dp[i][j] = Math.max(dp[i+1][j], dp[i][j+1]);
-    }
-  }
-  const ops = [];
-  let i = 0, j = 0;
-  while(i < n && j < m){
-    if(origNorm[i] === userNorm[j]){ ops.push({ type: "match", origIdx: i, userIdx: j }); i++; j++; }
-    else if(dp[i+1][j] >= dp[i][j+1]){ ops.push({ type: "missing", origIdx: i }); i++; }
-    else { ops.push({ type: "extra", userIdx: j }); j++; }
-  }
-  while(i < n){ ops.push({ type: "missing", origIdx: i }); i++; }
-  while(j < m){ ops.push({ type: "extra", userIdx: j }); j++; }
-  return ops;
-}
-
-// ---------- Quiz (تسميع) ----------
-function openQuiz(surah, ayah){
-  const key = verseKey(surah, ayah);
-  const text = getVerseText(surah, ayah);
-  if(!text){ showToast("نص هذه الآية غير متاح", true); return; }
-
-  activeQuiz = { key, surah, ayah, text, isRange: false, verseEndWordIndexes: null, verseEndAyahNumbers: null, hintWordIndex: null, hintCharsRevealed: 0 };
-
-  document.getElementById("quizTitle").textContent = `تسميع ${getSurahName(surah)} - آية ${ayah}`;
-  document.getElementById("quizInput").value = "";
-  document.getElementById("quizInput").scrollTop = 0;
-  document.getElementById("compareResult").innerHTML = "";
-  document.getElementById("liveCheckBox").innerHTML = "";
-  document.getElementById("liveCheckBox").scrollTop = 0;
-  document.getElementById("selfRateBox").className = "self-rate";
-  document.getElementById("quizResults").classList.remove("shown");
-  document.getElementById("manualReviewDate").value = "";
-  document.getElementById("quizModal").classList.add("active");
-}
-
-// تسميع نطاق كامل (أكتر من آية) كقطعة واحدة متصلة، بدون تقسيم على حدود الآيات
-function openQuizRange(startSurah, startAyah, endSurah, endAyah){
-  const allVerses = getVersesInRange(startSurah, startAyah, endSurah, endAyah);
-  // نبني verses و texts مع بعض بضمان توافق الترتيب 100%، ونتجاهل أي آية نصها غير متاح
-  const verses = [];
-  const texts = [];
-  allVerses.forEach(v => {
-    const t = getVerseText(v.surah, v.ayah);
-    if(t){ verses.push(v); texts.push(t); }
-  });
-  if(texts.length === 0){ showToast("نص هذا النطاق غير متاح", true); return; }
-
-  // دمج كل الآيات في كتلة نصية واحدة متصلة (النص نفسه بدون أي فاصل، عشان المقارنة/الحساب تفضل زي ما هي)
-  const fullText = texts.join(" ");
-
-  // نبني خريطة: لكل index آخر كلمة في آية معينة → رقم الآية دي (بترقيمها الفعلي في القرآن، مش ترقيم النطاق)
-  // عشان نعرض الفاصل ۝ ورقم الآية الحقيقي جواه وقت العرض فقط، من غير ما نأثر على النص المستخدم في الحساب
-  const verseEndWordIndexes = [];
-  const verseEndAyahNumbers = {};
-  let wordCounter = 0;
-  verses.forEach((v, i) => {
-    wordCounter += tokenize(texts[i]).length;
-    const endIdx = wordCounter - 1;
-    verseEndWordIndexes.push(endIdx);
-    verseEndAyahNumbers[endIdx] = v.ayah;
-  });
-
-  // مفتاح مركّب لتتبّع تقدّم الفقرة ككل في نظام المراجعة المتباعدة
-  const key = "range_" + verseKey(startSurah, startAyah) + "_to_" + verseKey(endSurah, endAyah);
-
-  activeQuiz = { key, surah: startSurah, ayah: startAyah, text: fullText, isRange: true, verseEndWordIndexes, verseEndAyahNumbers, hintWordIndex: null, hintCharsRevealed: 0 };
-
-  const title = (startSurah === endSurah)
-    ? `تسميع ${getSurahName(startSurah)} - من آية ${startAyah} إلى ${endAyah} (كقطعة واحدة)`
-    : `تسميع من ${getSurahName(startSurah)}:${startAyah} إلى ${getSurahName(endSurah)}:${endAyah} (كقطعة واحدة)`;
-
-  document.getElementById("quizTitle").textContent = title;
-  document.getElementById("quizInput").value = "";
-  document.getElementById("quizInput").scrollTop = 0;
-  document.getElementById("compareResult").innerHTML = "";
-  document.getElementById("liveCheckBox").innerHTML = "";
-  document.getElementById("liveCheckBox").scrollTop = 0;
-  document.getElementById("selfRateBox").className = "self-rate";
-  document.getElementById("quizResults").classList.remove("shown");
-  document.getElementById("manualReviewDate").value = "";
-  document.getElementById("quizModal").classList.add("active");
-}
-
-function closeQuizModal(){
-  document.getElementById("quizModal").classList.remove("active");
-  document.getElementById("liveCheckBox").innerHTML = "";
-  activeQuiz = null;
-}
-
-// يحدد index الكلمة اللي المفروض نلمّح بيها: أول كلمة بعد آخر كلمة كتبها المستخدم فعلياً
-function getHintTargetIndex(){
-  return getCompletedWordCount(); // index أول كلمة لسه ما كتبتهاش (0-based، ونفس عدد الكلمات المكتملة)
-}
-
-// زرار "الكلمة التالية 💡": يورّي كلمة كاملة إضافية كل ضغطة، بدايةً من بعد آخر كلمة كتبها المستخدم فعلاً
-function showNextWordHint(){
-  if(!activeQuiz) return;
-  const words = tokenize(activeQuiz.text);
-  const targetIdx = getHintTargetIndex();
-  if(targetIdx >= words.length){ showToast("وصلت لنهاية النص", true); return; }
-
-  if(activeQuiz.hintWordIndex !== targetIdx){
-    // كلمة جديدة عن آخر مرة (يبقى المستخدم كتب/تخطى كلمات، أو أول ضغطة) — نبدأ تلميحها من كلمة كاملة
-    activeQuiz.hintWordIndex = targetIdx;
-    activeQuiz.hintCharsRevealed = words[targetIdx].length;
-  } else {
-    // نفس الكلمة اللي كانت متلمّحة قبل كده وبردو مكتملناش — ممفيش داعي نزود حاجة، هي أصلاً ظاهرة كاملة
-    activeQuiz.hintCharsRevealed = words[targetIdx].length;
-  }
-  renderLiveCheckBox();
-}
-
-// زرار "الحرف التالي 🔤": يورّي حرف واحد إضافي بس كل ضغطة، بدايةً من نفس نقطة البداية
-function showNextCharHint(){
-  if(!activeQuiz) return;
-  const words = tokenize(activeQuiz.text);
-  const targetIdx = getHintTargetIndex();
-  if(targetIdx >= words.length){ showToast("وصلت لنهاية النص", true); return; }
-
-  if(activeQuiz.hintWordIndex !== targetIdx){
-    // كلمة جديدة — نبدأ من أول حرف بس
-    activeQuiz.hintWordIndex = targetIdx;
-    activeQuiz.hintCharsRevealed = 1;
-  } else {
-    // نفس الكلمة، نزود حرف واحد كل ضغطة لحد ما تكتمل
-    activeQuiz.hintCharsRevealed = Math.min((activeQuiz.hintCharsRevealed || 0) + 1, words[targetIdx].length);
-  }
-  renderLiveCheckBox();
-}
-
-// تحويل رقم إنجليزي (زي 12) لرقم عربي هندي (زي ١٢) عشان يبقى متسق مع شكل ترقيم الآيات في المصحف
-function toArabicDigits(num){
-  const arabicDigits = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
-  return String(num).split("").map(d => arabicDigits[d] || d).join("");
-}
-
-// دالة مساعدة: هل هذه الكلمة (بترقيمها المتصل idx) هي آخر كلمة في آية؟ لو كذلك نرجع علامة الفاصل ومعاها رقم الآية، وإلا نص فاضي
-function verseMarkerAfter(idx){
-  if(!activeQuiz || !activeQuiz.isRange || !activeQuiz.verseEndWordIndexes) return "";
-  if(!activeQuiz.verseEndWordIndexes.includes(idx)) return "";
-  const ayahNum = activeQuiz.verseEndAyahNumbers ? activeQuiz.verseEndAyahNumbers[idx] : null;
-  const numDisplay = ayahNum ? toArabicDigits(ayahNum) : "";
-  return ` <span class="verse-marker">۝${numDisplay}</span> `;
-}
-
-// ---------- تصحيح فوري كلمة بكلمة (عند الضغط على مسافة) ----------
-
-// عدد الكلمات المكتملة فعلياً في صندوق الكتابة (اللي المستخدم خلص كتابتها وبعدها مسافة)
-function getCompletedWordCount(){
-  const raw = document.getElementById("quizInput").value;
-  const endsWithSpace = /\s$/.test(raw);
-  const completedRaw = endsWithSpace ? raw.trim() : raw.slice(0, raw.length - lastWordLength(raw)).trim();
-  return tokenize(completedRaw).length;
-}
-
-// الدالة المركزية لرسم صندوق التصحيح الفوري: بترسم كل الكلمات المصححة (أخضر/أحمر) + كلمة أو حرف التلميح (أصفر) لو موجود
-function renderLiveCheckBox(){
-  if(!activeQuiz) return;
-  const box = document.getElementById("liveCheckBox");
-  const raw = document.getElementById("quizInput").value;
-
-  const endsWithSpace = /\s$/.test(raw);
-  const completedRaw = endsWithSpace ? raw.trim() : raw.slice(0, raw.length - lastWordLength(raw)).trim();
-
-  const originalWords = tokenize(activeQuiz.text);
-  const originalNorm = originalWords.map(normalizeForCompare);
-  const userCompletedWords = tokenize(completedRaw);
-
-  let html = [];
-  for(let idx = 0; idx < userCompletedWords.length; idx++){
-    const uWord = userCompletedWords[idx];
-    const uNorm = normalizeForCompare(uWord);
-    if(idx >= originalWords.length){
-      html.push(`<span class="word-extra">${uWord}</span>`); // كلمة زيادة عن حد الفقرة (مفيش أصل نقارنها بيه، فبتفضل زي ما كتبتها)
-      continue;
-    }
-    const isMatch = uNorm === originalNorm[idx];
-    // المقارنة بتتم على النص من غير تشكيل (uNorm مقابل originalNorm)
-    // لكن العرض دايماً بالكلمة الأصلية المشكّلة من القرآن (originalWords) لو الكلمة صح
-    // ولو غلط، نورّي كلمة المستخدم زي ما كتبها عشان يشوف غلطه بالظبط
-    const displayWord = isMatch ? originalWords[idx] : uWord;
-    html.push(`<span class="${isMatch ? 'word-ok' : 'word-wrong'}">${displayWord}</span>` + verseMarkerAfter(idx));
-  }
-
-  // إضافة تلميح الكلمة/الحرف التالي لو المستخدم دوس على زرار التلميح
-  if(activeQuiz.hintWordIndex !== null && activeQuiz.hintWordIndex !== undefined && activeQuiz.hintWordIndex < originalWords.length){
-    const hintWord = originalWords[activeQuiz.hintWordIndex];
-    const hintCharsCount = activeQuiz.hintCharsRevealed || 0;
-    // لو حروف الكلمة اتكشفت بالكامل أو أكتر (يعني دوس "الكلمة التالية")، نعرض الكلمة كاملة
-    const displayHint = (hintCharsCount >= hintWord.length) ? hintWord : hintWord.slice(0, hintCharsCount);
-    html.push(`<span class="word-hint">${displayHint}</span>` + verseMarkerAfter(activeQuiz.hintWordIndex));
-  }
-
-  box.innerHTML = html.join(" ");
-  box.scrollTop = box.scrollHeight;
-}
-
-function liveCheckWords(){
-  if(!activeQuiz) return;
-  // أي كتابة جديدة من المستخدم تلغي التلميح القديم (لأنه غالباً كتب الكلمة الملمّحة أو تخطاها)
-  activeQuiz.hintWordIndex = null;
-  activeQuiz.hintCharsRevealed = 0;
-  renderLiveCheckBox();
-}
-
-function lastWordLength(raw){
-  const m = raw.match(/(\S+)$/);
-  return m ? m[1].length : 0;
-}
-
-function handleQuizInputChange(){
-  // لو المستخدم بدأ يكتب حرف جديد، التلميح القديم بقى مش دقيق، فنلغيه ونعيد الرسم
-  // (renderLiveCheckBox بتتكفل بالسكرول الداخلي لصندوق التصحيح لوحدها)
-  if(activeQuiz && (activeQuiz.hintWordIndex !== null && activeQuiz.hintWordIndex !== undefined)){
-    activeQuiz.hintWordIndex = null;
-    activeQuiz.hintCharsRevealed = 0;
-    renderLiveCheckBox();
-  }
-  // مفيش تدخل يدوي في سكرول صندوق الكتابة — المتصفح بيتابع الكيرسر تلقائياً،
-  // والـ padding-bottom الصغير (سطرين) في CSS (.quiz-input) بيخلي الكتابة تنتقل قبل نهاية الصندوق بشوية، مش بالظبط عند حافته
-}
-
-function handleQuizInputKey(e){
-  if(e.key === " " || e.key === "Spacebar"){
-    // نأجل التنفيذ خطوة وحدة عشان المسافة تتسجل في value الأول
-    setTimeout(liveCheckWords, 0);
-  }
-}
-
-function checkQuizAnswer(){
-  if(!activeQuiz) return;
-  const userText = document.getElementById("quizInput").value.trim();
-  if(!userText){ showToast("اكتب الآية الأول قبل التحقق", true); return; }
-
-  const originalWords = tokenize(activeQuiz.text);
-  const userWords = tokenize(userText);
-  const originalNorm = originalWords.map(normalizeForCompare);
-  const userNorm = userWords.map(normalizeForCompare);
-
-  const ops = lcsAlign(originalWords, originalNorm, userNorm);
-  let correctCount = 0;
-  let htmlParts = [];
-  ops.forEach(op => {
-    if(op.type === "match"){ htmlParts.push(`<span class="word-ok">${originalWords[op.origIdx]}</span>` + verseMarkerAfter(op.origIdx)); correctCount++; }
-    else if(op.type === "missing"){ htmlParts.push(`<span class="word-missing">${originalWords[op.origIdx]}</span>` + verseMarkerAfter(op.origIdx)); }
-    else if(op.type === "extra"){ htmlParts.push(`<span class="word-extra">${userWords[op.userIdx]}</span>`); }
-  });
-
-  const percentage = originalWords.length > 0 ? Math.round((correctCount / originalWords.length) * 100) : 0;
-  const resultBox = document.getElementById("compareResult");
-  resultBox.innerHTML = `
-    <div class="compare-output">${htmlParts.join(" ")}</div>
-    <div class="compare-percentage">
-      نسبة الصحة: <b style="color:${percentage >= 80 ? 'var(--green-ok)' : 'var(--red-err)'}">${percentage}%</b>
-      (${correctCount} من ${originalWords.length} كلمة)
-    </div>
-    <div class="compare-legend">
-      <span class="word-ok">أخضر = صحيح</span> ·
-      <span class="word-missing">أحمر باهت = ناقص من كلامك</span> ·
-      <span class="word-extra">مشطوب = كتبته زيادة أو غلط</span>
-    </div>
-  `;
-  document.getElementById("selfRateBox").className = "self-rate shown";
-  document.getElementById("quizResults").classList.add("shown");
-  document.getElementById("quizResults").scrollTop = 0;
-}
-
-// ---------- Spaced Repetition ----------
-const BASE_INTERVAL_DAYS = 1;
-const RATING_DELTA = { excellent: 10, good: 5, medium: 2, bad: -2 };
-
-function todayStr(){ return new Date().toISOString().slice(0,10); }
-function addDays(dateStr, days){
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0,10);
-}
-function isDue(key){
-  const p = progress[key];
-  if(!p || !p.nextReviewDate) return false;
-  return p.nextReviewDate <= todayStr();
-}
-function daysDiff(a, b){
-  const d1 = new Date(a + "T00:00:00");
-  const d2 = new Date(b + "T00:00:00");
-  return Math.round((d2 - d1) / (1000*60*60*24));
-}
-
-function recordReview(key, reviewDate, rating){
-  const p = progress[key] || { history: [] };
-  const prevInterval = p.intervalDays || 0;
-  let newInterval;
-  if(rating === "manual"){
-    newInterval = prevInterval > 0 ? prevInterval : BASE_INTERVAL_DAYS;
-  } else {
-    const base = prevInterval > 0 ? prevInterval : BASE_INTERVAL_DAYS;
-    newInterval = Math.max(1, base + RATING_DELTA[rating]);
-  }
-  p.lastReviewDate = reviewDate;
-  p.intervalDays = newInterval;
-  p.nextReviewDate = addDays(reviewDate, newInterval);
-  p.history = p.history || [];
-  p.history.push({ date: reviewDate, rating });
-  progress[key] = p;
-  saveToCloud();
-}
-
-function submitSelfRating(rating){
-  if(!activeQuiz) return;
-  recordReview(activeQuiz.key, todayStr(), rating);
-  showToast("تم تسجيل المراجعة ✓ — المراجعة القادمة بعد " + progress[activeQuiz.key].intervalDays + " يوم");
-  closeQuizModal();
-  refreshAfterProgress();
-}
-
-function submitManualDate(){
-  if(!activeQuiz) return;
-  const dateVal = document.getElementById("manualReviewDate").value;
-  if(!dateVal){ showToast("اختر تاريخ أولاً", true); return; }
-  recordReview(activeQuiz.key, dateVal, "manual");
-  showToast("تم تسجيل تاريخ المراجعة اليدوي ✓");
-  closeQuizModal();
-  refreshAfterProgress();
-}
-
-function refreshAfterProgress(){
-  if(document.getElementById("view-review").classList.contains("active")){
-    renderReviewTab();
-  }
-  if(document.getElementById("view-range-content").classList.contains("active") && currentRangeId){
-    const range = ranges.find(r => r.id === currentRangeId);
-    if(range) renderAyahs(range);
-  }
-  if(document.getElementById("view-ranges").classList.contains("active")){
-    renderRangesList();
-  }
-  updateReviewBadge();
-}
-
-// ---------- Review Tab ----------
-function getAllDueVerses(){
-  const results = [];
-  ranges.forEach(range => {
-    const verses = getVersesInRange(range.startSurah, range.startAyah, range.endSurah, range.endAyah);
-    verses.forEach(v => {
-      const key = verseKey(v.surah, v.ayah);
-      const p = progress[key];
-      if(p && p.nextReviewDate && p.nextReviewDate <= todayStr()){
-        results.push({
-          key, range, surah: v.surah, ayah: v.ayah,
-          nextReviewDate: p.nextReviewDate,
-          overdueDays: daysDiff(p.nextReviewDate, todayStr())
-        });
-      }
+    const words = tokenize(v.text);
+    words.forEach((word, idx) => {
+      const wSpan = document.createElement("span");
+      wSpan.className = "w";
+      wSpan.textContent = word;
+      wSpan.dataset.ayah = v.number;
+      wSpan.dataset.w = idx;
+      wSpan.onclick = () => {
+        pos = { surah: surahNum, ayah: v.number, w: idx };
+        highlightCurrent(true);
+        persistPosition();
+      };
+      ayahSpan.appendChild(wSpan);
+      ayahSpan.appendChild(document.createTextNode(" "));
     });
+
+    const badge = document.createElement("span");
+    badge.className = "ayah-num-badge";
+    badge.textContent = toArabicDigits(v.number);
+    ayahSpan.appendChild(badge);
+    ayahSpan.appendChild(document.createTextNode(" "));
+
+    flow.appendChild(ayahSpan);
   });
-  results.sort((a,b) => b.overdueDays - a.overdueDays);
-  return results;
+
+  renderedSurah = surahNum;
 }
 
-function renderReviewTab(){
-  const due = getAllDueVerses();
-  const overdueOnly = due.filter(d => d.overdueDays > 0);
-  const todayOnly = due.filter(d => d.overdueDays === 0);
+// ---------- تحديث التظليل وصندوق الكلمة الحالية ----------
+function highlightCurrent(scroll){
+  if(renderedSurah !== pos.surah) renderSurah(pos.surah);
 
-  const summary = document.getElementById("reviewSummary");
-  summary.innerHTML = `
-    <div class="stat-box overdue"><div class="num">${overdueOnly.length}</div><div class="lbl">متأخرة</div></div>
-    <div class="stat-box"><div class="num">${todayOnly.length}</div><div class="lbl">مستحقة اليوم</div></div>
-    <div class="stat-box"><div class="num">${due.length}</div><div class="lbl">الإجمالي</div></div>
-  `;
+  document.querySelectorAll(".w.cur-word").forEach(el => el.classList.remove("cur-word"));
+  document.querySelectorAll(".ayah-block.cur-ayah").forEach(el => el.classList.remove("cur-ayah"));
 
-  const list = document.getElementById("reviewList");
-  list.innerHTML = "";
-  if(due.length === 0){
-    list.innerHTML = `<div class="empty-state"><div class="emoji">✅</div><div>مافيش آيات مستحقة للمراجعة دلوقتي، تبارك الله عليك</div></div>`;
-    return;
+  const wordEl = document.querySelector(`.w[data-ayah="${pos.ayah}"][data-w="${pos.w}"]`);
+  const ayahEl = document.querySelector(`.ayah-block[data-ayah="${pos.ayah}"]`);
+  if(wordEl) wordEl.classList.add("cur-word");
+  if(ayahEl) ayahEl.classList.add("cur-ayah");
+  if(wordEl && scroll){
+    wordEl.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
-  due.forEach(item => {
-    const el = document.createElement("div");
-    el.className = "review-item " + (item.overdueDays > 0 ? "overdue" : "today");
-    const tagText = item.overdueDays > 0 ? `متأخر ${item.overdueDays} يوم` : "مستحق اليوم";
-    el.innerHTML = `
-      <div class="info">
-        <div class="title">${getSurahName(item.surah)} — آية ${item.ayah}</div>
-        <div class="sub">النطاق: ${rangeLabel(item.range)}</div>
-      </div>
-      <span class="due-tag">${tagText}</span>
-    `;
-    el.onclick = () => openQuiz(item.surah, item.ayah);
-    list.appendChild(el);
-  });
+  const text = getVerseText(pos.surah, pos.ayah);
+  const words = text ? tokenize(text) : [];
+  document.getElementById("currentWordDisplay").textContent = words[pos.w] || "—";
+  document.getElementById("positionIndicator").textContent =
+    `سورة ${getSurahName(pos.surah)} — آية ${pos.ayah} — الكلمة ${pos.w + 1} من ${words.length}`;
+
+  document.getElementById("jumpSurah").value = String(pos.surah);
+  populateAyahSelect(pos.surah);
+  document.getElementById("jumpAyah").value = String(pos.ayah);
+
+  document.getElementById("btnPrevAyah").disabled = (pos.surah === 1 && pos.ayah === 1);
+  document.getElementById("btnNextAyah").disabled = (pos.surah === 114 && pos.ayah === getSurahTotalVerses(114));
+  document.getElementById("btnPrevWord").disabled = (pos.surah === 1 && pos.ayah === 1 && pos.w === 0);
 }
 
-function updateReviewBadge(){
-  const due = getAllDueVerses();
-  const badge = document.getElementById("reviewBadge");
-  if(due.length > 0){
-    badge.style.display = "flex";
-    badge.textContent = due.length > 99 ? "99+" : due.length;
+// ---------- التنقل ----------
+function wordCountOf(surah, ayah){
+  const t = getVerseText(surah, ayah);
+  return t ? tokenize(t).length : 0;
+}
+
+function goNextWord(){
+  const total = wordCountOf(pos.surah, pos.ayah);
+  if(pos.w < total - 1){
+    pos.w++;
   } else {
-    badge.style.display = "none";
+    if(!moveAyah(1)) { showToast("وصلت لنهاية القرآن، بارك الله فيك 🌙"); return; }
+    pos.w = 0;
   }
+  highlightCurrent(true);
+  persistPosition();
+}
+function goPrevWord(){
+  if(pos.w > 0){
+    pos.w--;
+  } else {
+    if(!moveAyah(-1)) { showToast("أنت في بداية القرآن"); return; }
+    pos.w = Math.max(0, wordCountOf(pos.surah, pos.ayah) - 1);
+  }
+  highlightCurrent(true);
+  persistPosition();
+}
+function goNextAyah(){
+  if(!moveAyah(1)){ showToast("وصلت لنهاية القرآن، بارك الله فيك 🌙"); return; }
+  pos.w = 0;
+  highlightCurrent(true);
+  persistPosition();
+}
+function goPrevAyah(){
+  if(!moveAyah(-1)){ showToast("أنت في بداية القرآن"); return; }
+  pos.w = 0;
+  highlightCurrent(true);
+  persistPosition();
 }
 
-// ---------- Auth ----------
+// ينقّل رقم السورة/الآية خطوة واحدة (١ للأمام، -١ للخلف). يرجع false لو وصلنا لحد المصحف
+function moveAyah(direction){
+  let { surah, ayah } = pos;
+  ayah += direction;
+  if(ayah < 1){
+    if(surah <= 1) return false;
+    surah -= 1;
+    ayah = getSurahTotalVerses(surah);
+  } else if(ayah > getSurahTotalVerses(surah)){
+    if(surah >= 114) return false;
+    surah += 1;
+    ayah = 1;
+  }
+  pos.surah = surah; pos.ayah = ayah;
+  return true;
+}
+
+function doJump(){
+  const s = Number(document.getElementById("jumpSurah").value);
+  const a = Number(document.getElementById("jumpAyah").value);
+  pos = { surah: s, ayah: a, w: 0 };
+  highlightCurrent(true);
+  persistPosition();
+}
+
+// ---------- المظهر ----------
+function toggleTheme(){
+  const html = document.documentElement;
+  const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  html.setAttribute("data-theme", next);
+  localStorage.setItem(THEME_KEY, next);
+}
+function cycleFontSize(){
+  const order = ["sm", "md", "lg", "xl"];
+  const html = document.documentElement;
+  const cur = html.getAttribute("data-fontsize") || "md";
+  const next = order[(order.indexOf(cur) + 1) % order.length];
+  html.setAttribute("data-fontsize", next);
+  localStorage.setItem(FONT_KEY, next);
+}
+function applySavedPrefs(){
+  const theme = localStorage.getItem(THEME_KEY);
+  if(theme) document.documentElement.setAttribute("data-theme", theme);
+  const fs = localStorage.getItem(FONT_KEY);
+  if(fs) document.documentElement.setAttribute("data-fontsize", fs);
+}
+
+// ---------- المزامنة (تسجيل الدخول) ----------
+function openAuth(){ document.getElementById("authOverlay").classList.add("active"); }
+function closeAuth(){ document.getElementById("authOverlay").classList.remove("active"); }
 function switchAuthTab(mode){
   authMode = mode;
   document.getElementById("tabLogin").classList.toggle("active", mode === "login");
@@ -805,38 +313,25 @@ function switchAuthTab(mode){
   document.getElementById("authSubmitBtn").textContent = mode === "login" ? "تسجيل الدخول" : "إنشاء الحساب";
   document.getElementById("authMsg").textContent = "";
 }
-
 function submitAuth(){
   const msgEl = document.getElementById("authMsg");
   msgEl.className = "auth-msg";
-  msgEl.textContent = "";
-  if(!fbReady){
-    msgEl.className = "auth-msg err";
-    msgEl.textContent = "خدمة المزامنة غير متاحة الآن، حاول تاني بعد قليل";
-    return;
-  }
+  if(!fbReady){ msgEl.className = "auth-msg err"; msgEl.textContent = "خدمة المزامنة غير متاحة الآن"; return; }
   const email = document.getElementById("authEmail").value.trim();
   const password = document.getElementById("authPassword").value;
-  if(!email || !password){
-    msgEl.className = "auth-msg err";
-    msgEl.textContent = "من فضلك اكتب البريد وكلمة المرور";
-    return;
-  }
+  if(!email || !password){ msgEl.className = "auth-msg err"; msgEl.textContent = "اكتب البريد وكلمة المرور"; return; }
   const action = authMode === "login"
     ? fbFns.signInWithEmailAndPassword(auth, email, password)
     : fbFns.createUserWithEmailAndPassword(auth, email, password);
-  action
-    .then(() => {
-      msgEl.className = "auth-msg ok";
-      msgEl.textContent = authMode === "login" ? "تم تسجيل الدخول ✓" : "تم إنشاء الحساب ✓";
-      setTimeout(() => goToRanges(), 700);
-    })
-    .catch(err => {
-      msgEl.className = "auth-msg err";
-      msgEl.textContent = translateAuthError(err.code);
-    });
+  action.then(() => {
+    msgEl.className = "auth-msg ok";
+    msgEl.textContent = authMode === "login" ? "تم تسجيل الدخول ✓" : "تم إنشاء الحساب ✓";
+    setTimeout(closeAuth, 700);
+  }).catch(err => {
+    msgEl.className = "auth-msg err";
+    msgEl.textContent = translateAuthError(err.code);
+  });
 }
-
 function translateAuthError(code){
   const map = {
     "auth/invalid-email": "البريد الإلكتروني غير صحيح",
@@ -844,82 +339,46 @@ function translateAuthError(code){
     "auth/wrong-password": "كلمة المرور غير صحيحة",
     "auth/invalid-credential": "بيانات الدخول غير صحيحة",
     "auth/email-already-in-use": "هذا البريد مسجّل من قبل، سجّل دخول بدل إنشاء حساب",
-    "auth/weak-password": "كلمة المرور ضعيفة، لازم تكون ٦ أحرف على الأقل",
+    "auth/weak-password": "كلمة المرور ضعيفة، لازم ٦ أحرف على الأقل",
     "auth/too-many-requests": "محاولات كتير، حاول بعد شوية"
   };
   return map[code] || ("حصل خطأ: " + code);
 }
 
-function doLogout(){
-  if(!fbReady) return;
-  fbFns.signOut(auth).then(() => { showToast("تم تسجيل الخروج"); goToRanges(); });
-}
-
-// ---------- Init ----------
-loadLocalData();
-populateSurahSelects();
-const initialState = location.hash ? hashToState(location.hash) : { view: "ranges" };
-history.replaceState(initialState, "", "#" + stateToHash(initialState));
-applyState(initialState, false);
-updateReviewBadge();
-initFirebase();
-
-// جعل الدوال متاحة من onclick (لأن الملف module)
-window.switchTab = switchTab;
-window.goToRanges = goToRanges;
-window.showAuthView = showAuthView;
-window.createRange = createRange;
-window.deleteRange = deleteRange;
-window.openRange = openRange;
-window.toggleAyahText = toggleAyahText;
-window.openQuiz = openQuiz;
-window.openQuizRange = openQuizRange;
-window.closeQuizModal = closeQuizModal;
-window.showNextWordHint = showNextWordHint;
-window.showNextCharHint = showNextCharHint;
-window.checkQuizAnswer = checkQuizAnswer;
-window.handleQuizInputKey = handleQuizInputKey;
-window.handleQuizInputChange = handleQuizInputChange;
-window.submitSelfRating = submitSelfRating;
-window.submitManualDate = submitManualDate;
-window.switchAuthTab = switchAuthTab;
-window.submitAuth = submitAuth;
-window.doLogout = doLogout;
+// ---------- أدوات عامة ----------
 function showToast(msg, isErr){
   const t = document.getElementById("toast");
   t.textContent = msg;
   t.className = "toast show" + (isErr ? " err" : "");
-  setTimeout(() => { t.className = "toast" + (isErr ? " err" : ""); }, 2800);
+  setTimeout(() => { t.className = "toast" + (isErr ? " err" : ""); }, 2400);
 }
 
-// ---------- Quran Data Helpers ----------
-function getSurahName(num){
-  const s = QURAN_SURAHS_LIST.find(s => s.number === num);
-  return s ? s.name : ("سورة " + num);
-}
+// ---------- اختصارات لوحة المفاتيح (للاستخدام على الكمبيوتر) ----------
+window.addEventListener("keydown", (e) => {
+  if(document.getElementById("authOverlay").classList.contains("active")) return;
+  if(e.key === "ArrowLeft"){ e.preventDefault(); goNextWord(); }
+  else if(e.key === "ArrowRight"){ e.preventDefault(); goPrevWord(); }
+  else if(e.key === "ArrowUp"){ e.preventDefault(); goPrevAyah(); }
+  else if(e.key === "ArrowDown"){ e.preventDefault(); goNextAyah(); }
+});
 
-function getVerseText(surah, ayah){
-  const surahVerses = QURAN_VERSES_DATA[String(surah)];
-  if(!surahVerses) return null;
-  const v = surahVerses.find(v => v.number === ayah);
-  return v ? v.text : null;
-}
+// ---------- التهيئة ----------
+applySavedPrefs();
+loadLocalPosition();
+populateSurahSelect();
+renderSurah(pos.surah);
+highlightCurrent(false);
+initFirebase();
 
-function getSurahTotalVerses(num){
-  const s = QURAN_SURAHS_LIST.find(s => s.number === num);
-  return s ? s.totalVerses : 0;
-}
-
-// إرجاع كل الآيات (سورة، رقم) بين نقطتي البداية والنهاية بترتيب المصحف
-function getVersesInRange(startSurah, startAyah, endSurah, endAyah){
-  const result = [];
-  for(let s = startSurah; s <= endSurah; s++){
-    const total = getSurahTotalVerses(s);
-    const from = (s === startSurah) ? startAyah : 1;
-    const to = (s === endSurah) ? endAyah : total;
-    for(let a = from; a <= to; a++){
-      result.push({ surah: s, ayah: a });
-    }
-  }
-  return result;
-}
+// إتاحة الدوال لأحداث onclick في الـ HTML (لأن الملف module)
+window.doJump = doJump;
+window.goNextWord = goNextWord;
+window.goPrevWord = goPrevWord;
+window.goNextAyah = goNextAyah;
+window.goPrevAyah = goPrevAyah;
+window.toggleTheme = toggleTheme;
+window.cycleFontSize = cycleFontSize;
+window.openAuth = openAuth;
+window.closeAuth = closeAuth;
+window.switchAuthTab = switchAuthTab;
+window.submitAuth = submitAuth;
