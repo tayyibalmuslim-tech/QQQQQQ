@@ -337,13 +337,16 @@ function applyMaskPref(){
 // ---------- تحديث التظليل وصندوق الكلمة الحالية ----------
 // بنسكرول بس لو الكلمة فعلاً خارجة عن حدود منطقة القراءة الظاهرة،
 // عشان معظم الضغطات (اللي الكلمة فيها ظاهرة أصلاً) متعملش حركة سكرول تحس بيها كتأخير
+// بنسكرول لما الكلمة تبعد عن نص منطقة القراءة بمسافة محسوسة،
+// عشان تفضل قريبة من المنتصف دايمًا ومتنزلش لحد آخر الشاشة قبل ما نلحقها
 function scrollWordIntoViewIfNeeded(el){
   const pane = document.getElementById("readingPane");
   const paneRect = pane.getBoundingClientRect();
   const elRect = el.getBoundingClientRect();
-  const margin = 36;
-  const outOfView = elRect.top < paneRect.top + margin || elRect.bottom > paneRect.bottom - margin;
-  if(outOfView){
+  const paneCenter = paneRect.top + paneRect.height / 2;
+  const elCenter = elRect.top + elRect.height / 2;
+  const threshold = paneRect.height * 0.22;
+  if(Math.abs(elCenter - paneCenter) > threshold){
     el.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 }
