@@ -38,7 +38,7 @@ async function initFirebase(){
       currentUser = user;
       setSyncDot(user ? "on" : "off");
       document.getElementById("userLine").textContent = user ? ("مسجّل الدخول: " + user.email) : "";
-      if(user) loadCloudPosition(user.uid);
+      if(user){ loadCloudPosition(user.uid); loadCloudAnnotations(user.uid); }
     });
   }catch(err){
     console.error("فشل تحميل Firebase:", err);
@@ -64,6 +64,14 @@ const POS_KEY = "navq_position_v1";
 const THEME_KEY = "navq_theme_v1";
 const FONT_KEY = "navq_fontsize_v1";
 const MASK_KEY = "navq_mask_v1";
+const ANN_KEY = "navq_annotations_v1";
+
+// ---------- الأخطاء والملاحظات على الكلمة/الآية ----------
+// annotations.word["surah:ayah:w"] = { error: bool, note: string }
+// annotations.ayah["surah:ayah"]   = { error: bool, note: string }
+let annotations = { word: {}, ayah: {} };
+let noteScope = "word";
+let annSaveTimer = null;
 
 let saveErrorShown = false;
 let loadErrorShown = false;
@@ -151,6 +159,46 @@ function loadCloudPosition(uid){
   });
 }
 
+function loadLocalAnnotations(){
+  try{
+    const raw = localStorage.getItem(ANN_KEY);
+    if(raw){
+      const p = JSON.parse(raw);
+      annotations = { word: p.word || {}, ayah: p.ayah || {} };
+    }
+  }catch(e){ /* تجاهل */ }
+}
+function saveLocalAnnotations(){
+  localStorage.setItem(ANN_KEY, JSON.stringify(annotations));
+}
+function persistAnnotations(){
+  saveLocalAnnotations();
+  clearTimeout(annSaveTimer);
+  annSaveTimer = setTimeout(() => {
+    if(currentUser && fbReady){
+      fbFns.set(fbFns.ref(db, `navApp/${currentUser.uid}/annotations`), annotations)
+        .then(() => setSyncDot("on"))
+        .catch(err => {
+          setSyncDot("err");
+          if(!saveErrorShown){
+            saveErrorShown = true;
+            showToast("تعذّرت مزامنة الملاحظات: " + friendlyFirebaseError(err), true);
+          }
+        });
+    }
+  }, 700);
+}
+function loadCloudAnnotations(uid){
+  fbFns.get(fbFns.ref(db, `navApp/${uid}/annotations`)).then(snap => {
+    if(snap.exists()){
+      const v = snap.val();
+      annotations = { word: v.word || {}, ayah: v.ayah || {} };
+      saveLocalAnnotations();
+      applyAnnotationMarkers();
+    }
+  }).catch(() => { /* هنعرض خطأ الموضع أصلاً، متعملش توست إضافي */ });
+}
+
 // ---------- بناء قوائم الاختيار ----------
 function populateSurahSelect(){
   const sel = document.getElementById("jumpSurah");
@@ -232,6 +280,32 @@ function renderSurah(surahNum){
 
   renderedSurah = surahNum;
   prevMaskAyah = null; // إجبار فحص كامل مرة واحدة بس بعد رسم سورة جديدة
+  applyAnnotationMarkers();
+}
+
+// ---------- عرض علامات الخطأ/الملاحظة على العناصر المرسومة ----------
+function applyAnnotationMarkers(){
+  wordElByKey.forEach(el => el.classList.remove("word-err", "word-note"));
+  ayahElByNum.forEach(el => el.classList.remove("ayah-err", "ayah-note"));
+
+  Object.keys(annotations.word).forEach(key => {
+    const parts = key.split(":");
+    if(Number(parts[0]) !== renderedSurah) return;
+    const el = wordElByKey.get(parts[1] + ":" + parts[2]);
+    if(!el) return;
+    const rec = annotations.word[key];
+    if(rec.error) el.classList.add("word-err");
+    if(rec.note) el.classList.add("word-note");
+  });
+  Object.keys(annotations.ayah).forEach(key => {
+    const parts = key.split(":");
+    if(Number(parts[0]) !== renderedSurah) return;
+    const el = ayahElByNum.get(Number(parts[1]));
+    if(!el) return;
+    const rec = annotations.ayah[key];
+    if(rec.error) el.classList.add("ayah-err");
+    if(rec.note) el.classList.add("ayah-note");
+  });
 }
 
 // ---------- إخفاء/تعتيم الجزء اللي لسه ما وصلناش له (مساعدة على الحفظ) ----------
@@ -299,7 +373,6 @@ function highlightCurrent(scroll){
 
   const text = getVerseText(pos.surah, pos.ayah);
   const words = text ? tokenize(text) : [];
-  document.getElementById("currentWordDisplay").textContent = words[pos.w] || "—";
   document.getElementById("positionIndicator").textContent =
     `سورة ${getSurahName(pos.surah)} — آية ${pos.ayah} — الكلمة ${pos.w + 1} من ${words.length}`;
 
@@ -404,6 +477,58 @@ function applySavedPrefs(){
 // ---------- المزامنة (تسجيل الدخول) ----------
 function openAuth(){ document.getElementById("authOverlay").classList.add("active"); }
 function closeAuth(){ document.getElementById("authOverlay").classList.remove("active"); }
+
+// ---------- لوحة الخطأ / الملاحظة ----------
+function currentNoteKey(){
+  return noteScope === "word"
+    ? (pos.surah + ":" + pos.ayah + ":" + pos.w)
+    : (pos.surah + ":" + pos.ayah);
+}
+function currentNoteStore(){
+  return noteScope === "word" ? annotations.word : annotations.ayah;
+}
+function openNoteOverlay(){
+  document.getElementById("notePosLabel").textContent =
+    `سورة ${getSurahName(pos.surah)} — آية ${pos.ayah} — الكلمة ${pos.w + 1}`;
+  setNoteScope("word");
+  document.getElementById("noteOverlay").classList.add("active");
+}
+function closeNoteOverlay(){
+  document.getElementById("noteOverlay").classList.remove("active");
+}
+function setNoteScope(scope){
+  noteScope = scope;
+  document.getElementById("scopeWord").classList.toggle("active", scope === "word");
+  document.getElementById("scopeAyah").classList.toggle("active", scope === "ayah");
+  const rec = currentNoteStore()[currentNoteKey()];
+  document.getElementById("noteErrCheck").checked = !!(rec && rec.error);
+  document.getElementById("noteText").value = (rec && rec.note) || "";
+}
+function saveNote(){
+  const store = currentNoteStore();
+  const key = currentNoteKey();
+  const error = document.getElementById("noteErrCheck").checked;
+  const note = document.getElementById("noteText").value.trim();
+  if(!error && !note){
+    delete store[key];
+  } else {
+    store[key] = { error, note };
+  }
+  persistAnnotations();
+  applyAnnotationMarkers();
+  closeNoteOverlay();
+  showToast("تم الحفظ ✓");
+}
+function deleteNote(){
+  const store = currentNoteStore();
+  const key = currentNoteKey();
+  delete store[key];
+  persistAnnotations();
+  applyAnnotationMarkers();
+  document.getElementById("noteErrCheck").checked = false;
+  document.getElementById("noteText").value = "";
+  showToast("تم الحذف");
+}
 function switchAuthTab(mode){
   authMode = mode;
   document.getElementById("tabLogin").classList.toggle("active", mode === "login");
@@ -454,6 +579,7 @@ function showToast(msg, isErr){
 // ---------- اختصارات لوحة المفاتيح (للاستخدام على الكمبيوتر) ----------
 window.addEventListener("keydown", (e) => {
   if(document.getElementById("authOverlay").classList.contains("active")) return;
+  if(document.getElementById("noteOverlay").classList.contains("active")) return;
   if(e.key === "ArrowLeft"){ e.preventDefault(); goNextWord(); }
   else if(e.key === "ArrowRight"){ e.preventDefault(); goPrevWord(); }
   else if(e.key === "ArrowUp"){ e.preventDefault(); goPrevAyah(); }
@@ -464,6 +590,7 @@ window.addEventListener("keydown", (e) => {
 applySavedPrefs();
 applyMaskPref();
 loadLocalPosition();
+loadLocalAnnotations();
 populateSurahSelect();
 renderSurah(pos.surah);
 highlightCurrent(false);
@@ -482,3 +609,8 @@ window.openAuth = openAuth;
 window.closeAuth = closeAuth;
 window.switchAuthTab = switchAuthTab;
 window.submitAuth = submitAuth;
+window.openNoteOverlay = openNoteOverlay;
+window.closeNoteOverlay = closeNoteOverlay;
+window.setNoteScope = setNoteScope;
+window.saveNote = saveNote;
+window.deleteNote = deleteNote;
