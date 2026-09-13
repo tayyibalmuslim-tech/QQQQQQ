@@ -60,6 +60,18 @@ let saveTimer = null;
 const POS_KEY = "navq_position_v1";
 const THEME_KEY = "navq_theme_v1";
 const FONT_KEY = "navq_fontsize_v1";
+const MASK_KEY = "navq_mask_v1";
+
+let saveErrorShown = false;
+let loadErrorShown = false;
+
+function friendlyFirebaseError(err){
+  const msg = (err && err.message) || String(err);
+  if(/permission_denied|Permission denied/i.test(msg)){
+    return "قاعدة صلاحيات قاعدة البيانات في Firebase مش سامحة بالمسار ده — راجع Rules في الكونسول";
+  }
+  return msg;
+}
 
 function tokenize(text){ return text.trim().split(/\s+/).filter(Boolean); }
 
@@ -98,7 +110,14 @@ function saveLocalPosition(){
 function saveToCloud(){
   if(currentUser && fbReady){
     fbFns.set(fbFns.ref(db, `navApp/${currentUser.uid}/position`), pos)
-      .catch(err => showToast("تعذّرت المزامنة: " + err.message, true));
+      .then(() => setSyncDot("on"))
+      .catch(err => {
+        setSyncDot("err");
+        if(!saveErrorShown){
+          saveErrorShown = true;
+          showToast("تعذّرت المزامنة: " + friendlyFirebaseError(err), true);
+        }
+      });
   }
 }
 function persistPosition(){
@@ -120,7 +139,13 @@ function loadCloudPosition(uid){
     } else {
       saveToCloud();
     }
-  }).catch(err => showToast("تعذّر تحميل موضعك المحفوظ: " + err.message, true));
+  }).catch(err => {
+    setSyncDot("err");
+    if(!loadErrorShown){
+      loadErrorShown = true;
+      showToast("تعذّر تحميل موضعك المحفوظ: " + friendlyFirebaseError(err), true);
+    }
+  });
 }
 
 // ---------- بناء قوائم الاختيار ----------
@@ -186,12 +211,33 @@ function renderSurah(surahNum){
   renderedSurah = surahNum;
 }
 
+// ---------- إخفاء/تعتيم الجزء اللي لسه ما وصلناش له (مساعدة على الحفظ) ----------
+function updateFutureMasks(){
+  document.querySelectorAll("#ayahsFlow .w").forEach(el => {
+    const a = Number(el.dataset.ayah), w = Number(el.dataset.w);
+    const isFuture = (a > pos.ayah) || (a === pos.ayah && w > pos.w);
+    el.classList.toggle("future", isFuture);
+  });
+}
+function toggleMask(){
+  const on = document.body.classList.toggle("mask-ahead");
+  localStorage.setItem(MASK_KEY, on ? "1" : "0");
+  document.getElementById("btnMask").textContent = on ? "🙈" : "👁";
+}
+function applyMaskPref(){
+  const saved = localStorage.getItem(MASK_KEY);
+  const on = saved === null ? true : saved === "1"; // افتراضيًا مفعّل
+  document.body.classList.toggle("mask-ahead", on);
+  document.getElementById("btnMask").textContent = on ? "🙈" : "👁";
+}
+
 // ---------- تحديث التظليل وصندوق الكلمة الحالية ----------
 function highlightCurrent(scroll){
   if(renderedSurah !== pos.surah) renderSurah(pos.surah);
 
   document.querySelectorAll(".w.cur-word").forEach(el => el.classList.remove("cur-word"));
   document.querySelectorAll(".ayah-block.cur-ayah").forEach(el => el.classList.remove("cur-ayah"));
+  updateFutureMasks();
 
   const wordEl = document.querySelector(`.w[data-ayah="${pos.ayah}"][data-w="${pos.w}"]`);
   const ayahEl = document.querySelector(`.ayah-block[data-ayah="${pos.ayah}"]`);
@@ -364,6 +410,7 @@ window.addEventListener("keydown", (e) => {
 
 // ---------- التهيئة ----------
 applySavedPrefs();
+applyMaskPref();
 loadLocalPosition();
 populateSurahSelect();
 renderSurah(pos.surah);
@@ -378,6 +425,7 @@ window.goNextAyah = goNextAyah;
 window.goPrevAyah = goPrevAyah;
 window.toggleTheme = toggleTheme;
 window.cycleFontSize = cycleFontSize;
+window.toggleMask = toggleMask;
 window.openAuth = openAuth;
 window.closeAuth = closeAuth;
 window.switchAuthTab = switchAuthTab;
