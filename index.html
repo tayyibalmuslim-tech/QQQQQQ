@@ -212,6 +212,11 @@
     box-shadow: 0 0 0 2px var(--hl-word-ring);
     font-weight:700;
   }
+  body.mask-ahead .w.future{
+    filter: blur(6px);
+    opacity:0.42;
+  }
+  body.mask-ahead .w.future:hover{ opacity:0.6; }
 
   /* -------- Current word box -------- */
   .current-word-box{
@@ -337,6 +342,7 @@
     <span class="sync-dot" id="syncDot" title="حالة المزامنة"></span>
     <button class="icon-btn" id="btnFontSize" onclick="window.cycleFontSize()" title="حجم الخط">Aa</button>
     <button class="icon-btn" id="btnTheme" onclick="window.toggleTheme()" title="الوضع الليلي/النهاري">🌓</button>
+    <button class="icon-btn" id="btnMask" onclick="window.toggleMask()" title="إخفاء الجزء اللي لسه ما وصلتش له">🙈</button>
     <button class="icon-btn" onclick="window.openAuth()" title="المزامنة">👤</button>
   </div>
 </header>
