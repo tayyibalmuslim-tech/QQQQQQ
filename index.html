@@ -82,7 +82,7 @@
     flex:0 0 auto;
     background: linear-gradient(180deg, var(--accent-deep), var(--accent));
     color:#F5F2E5;
-    padding: 10px 14px;
+    padding: 6px 12px;
     display:flex;
     align-items:center;
     justify-content:space-between;
@@ -91,28 +91,28 @@
     gap:8px;
   }
   header.topbar .brand{
-    display:flex; align-items:center; gap:8px;
-    font-weight:800; font-size:1.02rem;
+    display:flex; align-items:center; gap:6px;
+    font-weight:800; font-size:0.86rem;
   }
   header.topbar .brand .mark{
-    width:28px;height:28px; border-radius:50%;
+    width:22px;height:22px; border-radius:50%;
     border:1.5px solid rgba(245,242,229,0.55);
-    display:flex;align-items:center;justify-content:center;font-size:14px;
+    display:flex;align-items:center;justify-content:center;font-size:11px;
   }
   .icon-btn{
     background: rgba(255,255,255,0.1);
     border: 1px solid rgba(255,255,255,0.28);
     color:#F5F2E5;
-    border-radius:10px;
-    width:36px;height:36px;
-    font-size:0.95rem;
+    border-radius:8px;
+    width:28px;height:28px;
+    font-size:0.78rem;
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;
     flex:0 0 auto;
   }
   .icon-btn:active{ background: rgba(255,255,255,0.22); }
-  .header-actions{ display:flex; gap:6px; align-items:center; }
-  .sync-dot{ width:8px;height:8px;border-radius:50%; background:#C9C2A6; flex:0 0 auto; }
+  .header-actions{ display:flex; gap:5px; align-items:center; }
+  .sync-dot{ width:7px;height:7px;border-radius:50%; background:#C9C2A6; flex:0 0 auto; }
   .sync-dot.on{ background:#8FE0A8; }
   .sync-dot.err{ background:#E39B8F; }
 
@@ -127,18 +127,12 @@
     margin: 0 12px calc(10px + env(safe-area-inset-bottom));
     text-align:center;
   }
-  .place-text{
-    font-size:0.84rem;
-    color: var(--ink-soft);
-    font-weight:600;
-    margin-bottom:6px;
-  }
   .place-progress{
     height:5px;
     border-radius:99px;
     background: var(--bg-deep);
     overflow:hidden;
-    margin-bottom:10px;
+    margin-top:10px;
   }
   .place-progress-fill{
     height:100%;
@@ -269,59 +263,55 @@
 
   /* -------- أزرار الوسط (تسجيل خطأ / ملاحظة) -------- */
   .mid-btn{
-    flex:0 0 56px;
+    flex:0 0 40px;
     border:none;
-    border-radius:14px;
+    border-radius:10px;
     cursor:pointer;
-    font-size:1.15rem;
+    font-size:0.85rem;
     background: var(--surface-soft);
     border:1.5px solid var(--line);
+    min-height:34px;
   }
   .mid-btn:active{ transform: scale(0.93); }
-  .nav-row.ayah-row .mid-btn{ min-height:48px; }
-  .nav-row.word-row .mid-btn{ min-height:64px; }
   .mid-btn.note-btn.has-note{ background: rgba(169,130,46,0.18); border-color: var(--gold); }
   .mid-btn.err-btn.lvl-1{ background: color-mix(in srgb, var(--lvl1) 30%, var(--surface-soft)); border-color: var(--lvl1); }
   .mid-btn.err-btn.lvl-2{ background: color-mix(in srgb, var(--lvl2) 35%, var(--surface-soft)); border-color: var(--lvl2); }
   .mid-btn.err-btn.lvl-3{ background: color-mix(in srgb, var(--lvl3) 40%, var(--surface-soft)); border-color: var(--lvl3); }
   .mid-btn.err-btn.lvl-4{ background: color-mix(in srgb, var(--lvl4) 45%, var(--surface-soft)); border-color: var(--lvl4); }
 
-  /* -------- Nav controls -------- */
+  /* -------- Nav controls (علامات صغيرة بدل الأزرار الكبيرة) -------- */
   nav.nav-controls{
     flex:0 0 auto;
-    padding: 8px 12px 10px;
+    padding: 6px 12px 8px;
     background: var(--surface-soft);
     border-top:1px solid var(--line);
     display:flex;
     flex-direction:column;
-    gap:8px;
+    gap:6px;
   }
-  .nav-row{ display:flex; gap:8px; }
+  .nav-row{ display:flex; gap:6px; }
   .nav-btn{
     flex:1;
     border:none;
-    border-radius:14px;
+    border-radius:10px;
     cursor:pointer;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:2px;
+    display:flex; align-items:center; justify-content:center;
     font-family:inherit;
+    font-weight:700;
+    font-size:0.8rem;
     color:#fff;
-    padding: 10px 4px;
+    min-height:34px;
+    padding: 6px 4px;
     user-select:none;
   }
-  .nav-btn .lbl{ font-weight:700; font-size:0.82rem; }
-  .nav-btn .sub{ font-size:0.62rem; opacity:0.85; }
-  .nav-btn:active{ transform: scale(0.97); }
+  .nav-btn:active{ transform: scale(0.96); }
   .nav-row.word-row .nav-btn{
     background: linear-gradient(180deg, var(--accent), var(--accent-deep));
-    min-height:64px;
-    box-shadow: 0 3px 8px var(--shadow);
   }
   .nav-row.ayah-row .nav-btn{
     background: var(--surface);
     color: var(--accent-deep);
     border: 1.5px solid var(--accent);
-    min-height:48px;
   }
   html[data-theme="dark"] .nav-row.ayah-row .nav-btn{ color: var(--accent); }
   .nav-btn:disabled{ opacity:0.35; cursor:not-allowed; }
@@ -393,37 +383,28 @@
 
 <nav class="nav-controls">
   <div class="nav-row ayah-row">
-    <button class="nav-btn" id="btnPrevAyah" onclick="window.goPrevAyah()">
-      <span class="lbl">الآية السابقة</span><span class="sub">ينتقل لبداية الآية ››</span>
-    </button>
+    <button class="nav-btn" id="btnPrevAyah" onclick="window.goPrevAyah()">آية ›</button>
     <button class="mid-btn note-btn" id="btnAyahNote" onclick="window.markAyahNote()" title="ملاحظة على الآية الحالية">
       📝
     </button>
-    <button class="nav-btn" id="btnNextAyah" onclick="window.goNextAyah()">
-      <span class="lbl">الآية التالية</span><span class="sub">‹‹ ينتقل لبداية الآية</span>
-    </button>
+    <button class="nav-btn" id="btnNextAyah" onclick="window.goNextAyah()">‹ آية</button>
   </div>
   <div class="nav-row word-row">
-    <button class="nav-btn" id="btnPrevWord" onclick="window.goPrevWord()">
-      <span class="lbl">الكلمة السابقة</span><span class="sub">›</span>
-    </button>
+    <button class="nav-btn" id="btnPrevWord" onclick="window.goPrevWord()">كلمة ›</button>
     <button class="mid-btn err-btn" id="btnWordErr" onclick="window.markWordError()" title="تسجيل خطأ على الكلمة الحالية">
       ⚠️
     </button>
-    <button class="nav-btn" id="btnNextWord" onclick="window.goNextWord()">
-      <span class="lbl">الكلمة التالية</span><span class="sub">‹</span>
-    </button>
+    <button class="nav-btn" id="btnNextWord" onclick="window.goNextWord()">‹ كلمة</button>
   </div>
 </nav>
 
 <div class="place-bar">
-  <div class="place-text" id="positionIndicator">—</div>
-  <div class="place-progress"><div class="place-progress-fill" id="placeProgressFill"></div></div>
   <div class="jump-row">
     <select id="jumpSurah"></select>
     <select id="jumpAyah"></select>
     <button onclick="window.doJump()">اذهب</button>
   </div>
+  <div class="place-progress"><div class="place-progress-fill" id="placeProgressFill"></div></div>
 </div>
 
 <div class="toast" id="toast"></div>
