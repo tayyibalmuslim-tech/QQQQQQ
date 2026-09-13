@@ -56,6 +56,9 @@ function setSyncDot(state){
 let pos = { surah: 1, ayah: 1, w: 0 };
 let renderedSurah = null;
 let saveTimer = null;
+let lastPopulatedAyahSurah = null;
+let curWordEl = null;
+let curAyahEl = null;
 
 const POS_KEY = "navq_position_v1";
 const THEME_KEY = "navq_theme_v1";
@@ -163,14 +166,26 @@ function populateAyahSelect(surahNum){
   for(let a = 1; a <= total; a++){ opts += `<option value="${a}">آية ${a}</option>`; }
   sel.innerHTML = opts;
   sel.value = String(surahNum === pos.surah ? pos.ayah : 1);
+  lastPopulatedAyahSurah = surahNum;
 }
 
 // ---------- رسم آيات السورة الحالية ----------
+// بنبني فهرسة مباشرة (Map) لعناصر كل كلمة/آية وقت الرسم، بدل ما ندوّر عليها
+// بـ querySelector في كل ضغطة زرار — ده اللي بيخلي التنقل سريع حتى في سورة البقرة
+let wordElByKey = new Map();   // "ayah:w" -> element
+let ayahElByNum = new Map();   // ayah -> element
+let wordsByAyahNum = new Map(); // ayah -> [word elements] (بترتيب الكلمات)
+
 function renderSurah(surahNum){
   const verses = QURAN_VERSES_DATA[String(surahNum)];
   const flow = document.getElementById("ayahsFlow");
   flow.innerHTML = "";
   document.getElementById("surahHeading").textContent = `سورة ${getSurahName(surahNum)}`;
+  wordElByKey = new Map();
+  ayahElByNum = new Map();
+  wordsByAyahNum = new Map();
+  curWordEl = null;
+  curAyahEl = null;
 
   if(!verses){
     flow.innerHTML = `<div style="text-align:center;color:var(--ink-soft);">نص هذه السورة غير متاح حاليًا</div>`;
@@ -178,12 +193,15 @@ function renderSurah(surahNum){
     return;
   }
 
+  const frag = document.createDocumentFragment();
   verses.forEach(v => {
     const ayahSpan = document.createElement("span");
     ayahSpan.className = "ayah-block";
     ayahSpan.dataset.ayah = v.number;
+    ayahElByNum.set(v.number, ayahSpan);
 
     const words = tokenize(v.text);
+    const wordEls = [];
     words.forEach((word, idx) => {
       const wSpan = document.createElement("span");
       wSpan.className = "w";
@@ -195,9 +213,12 @@ function renderSurah(surahNum){
         highlightCurrent(true);
         persistPosition();
       };
+      wordElByKey.set(v.number + ":" + idx, wSpan);
+      wordEls.push(wSpan);
       ayahSpan.appendChild(wSpan);
       ayahSpan.appendChild(document.createTextNode(" "));
     });
+    wordsByAyahNum.set(v.number, wordEls);
 
     const badge = document.createElement("span");
     badge.className = "ayah-num-badge";
@@ -205,19 +226,31 @@ function renderSurah(surahNum){
     ayahSpan.appendChild(badge);
     ayahSpan.appendChild(document.createTextNode(" "));
 
-    flow.appendChild(ayahSpan);
+    frag.appendChild(ayahSpan);
   });
+  flow.appendChild(frag);
 
   renderedSurah = surahNum;
+  prevMaskAyah = null; // إجبار فحص كامل مرة واحدة بس بعد رسم سورة جديدة
 }
 
 // ---------- إخفاء/تعتيم الجزء اللي لسه ما وصلناش له (مساعدة على الحفظ) ----------
+// بنحدّث بس الآية الحالية (وسابقتها لو اتغيّرت) بدل ما نفحص كل كلمات السورة في كل ضغطة
+let prevMaskAyah = null;
+function applyFutureClass(el){
+  const a = Number(el.dataset.ayah), w = Number(el.dataset.w);
+  el.classList.toggle("future", (a > pos.ayah) || (a === pos.ayah && w > pos.w));
+}
 function updateFutureMasks(){
-  document.querySelectorAll("#ayahsFlow .w").forEach(el => {
-    const a = Number(el.dataset.ayah), w = Number(el.dataset.w);
-    const isFuture = (a > pos.ayah) || (a === pos.ayah && w > pos.w);
-    el.classList.toggle("future", isFuture);
-  });
+  if(prevMaskAyah === null){
+    wordElByKey.forEach(applyFutureClass);
+  } else {
+    const ayahs = new Set([pos.ayah, prevMaskAyah]);
+    ayahs.forEach(ayahNum => {
+      (wordsByAyahNum.get(ayahNum) || []).forEach(applyFutureClass);
+    });
+  }
+  prevMaskAyah = pos.ayah;
 }
 function toggleMask(){
   const on = document.body.classList.toggle("mask-ahead");
@@ -232,19 +265,36 @@ function applyMaskPref(){
 }
 
 // ---------- تحديث التظليل وصندوق الكلمة الحالية ----------
+// بنسكرول بس لو الكلمة فعلاً خارجة عن حدود منطقة القراءة الظاهرة،
+// عشان معظم الضغطات (اللي الكلمة فيها ظاهرة أصلاً) متعملش حركة سكرول تحس بيها كتأخير
+function scrollWordIntoViewIfNeeded(el){
+  const pane = document.getElementById("readingPane");
+  const paneRect = pane.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const margin = 36;
+  const outOfView = elRect.top < paneRect.top + margin || elRect.bottom > paneRect.bottom - margin;
+  if(outOfView){
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+}
+
 function highlightCurrent(scroll){
   if(renderedSurah !== pos.surah) renderSurah(pos.surah);
 
-  document.querySelectorAll(".w.cur-word").forEach(el => el.classList.remove("cur-word"));
-  document.querySelectorAll(".ayah-block.cur-ayah").forEach(el => el.classList.remove("cur-ayah"));
+  if(curWordEl) curWordEl.classList.remove("cur-word");
   updateFutureMasks();
 
-  const wordEl = document.querySelector(`.w[data-ayah="${pos.ayah}"][data-w="${pos.w}"]`);
-  const ayahEl = document.querySelector(`.ayah-block[data-ayah="${pos.ayah}"]`);
+  const wordEl = wordElByKey.get(pos.ayah + ":" + pos.w);
+  const ayahEl = ayahElByNum.get(pos.ayah);
+  if(ayahEl !== curAyahEl){
+    if(curAyahEl) curAyahEl.classList.remove("cur-ayah");
+    if(ayahEl) ayahEl.classList.add("cur-ayah");
+    curAyahEl = ayahEl || null;
+  }
   if(wordEl) wordEl.classList.add("cur-word");
-  if(ayahEl) ayahEl.classList.add("cur-ayah");
+  curWordEl = wordEl || null;
   if(wordEl && scroll){
-    wordEl.scrollIntoView({ block: "center", behavior: "smooth" });
+    scrollWordIntoViewIfNeeded(wordEl);
   }
 
   const text = getVerseText(pos.surah, pos.ayah);
@@ -254,7 +304,9 @@ function highlightCurrent(scroll){
     `سورة ${getSurahName(pos.surah)} — آية ${pos.ayah} — الكلمة ${pos.w + 1} من ${words.length}`;
 
   document.getElementById("jumpSurah").value = String(pos.surah);
-  populateAyahSelect(pos.surah);
+  if(lastPopulatedAyahSurah !== pos.surah){
+    populateAyahSelect(pos.surah);
+  }
   document.getElementById("jumpAyah").value = String(pos.ayah);
 
   document.getElementById("btnPrevAyah").disabled = (pos.surah === 1 && pos.ayah === 1);
