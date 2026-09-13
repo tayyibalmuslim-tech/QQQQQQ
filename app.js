@@ -367,11 +367,6 @@ function highlightCurrent(scroll){
     scrollWordIntoViewIfNeeded(wordEl);
   }
 
-  const text = getVerseText(pos.surah, pos.ayah);
-  const words = text ? tokenize(text) : [];
-  document.getElementById("positionIndicator").textContent =
-    `سورة ${getSurahName(pos.surah)} — آية ${pos.ayah} — الكلمة ${pos.w + 1} من ${words.length}`;
-
   const totalAyahs = getSurahTotalVerses(pos.surah) || 1;
   const progressPct = Math.min(100, Math.round(((pos.ayah - 1) / totalAyahs) * 100));
   document.getElementById("placeProgressFill").style.width = progressPct + "%";
