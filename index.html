@@ -26,6 +26,10 @@
     --shadow: rgba(43,38,32,0.14);
     --danger: #B5423A;
     --ok: #3F7A3F;
+    --lvl1: #4E9A4E;
+    --lvl2: #D8B22E;
+    --lvl3: #DB8A3B;
+    --lvl4: #C23B30;
     --radius: 16px;
     --qscale: 1;
   }
@@ -47,6 +51,10 @@
     --shadow: rgba(0,0,0,0.4);
     --danger: #E37167;
     --ok: #7FCB7F;
+    --lvl1: #6FCB6F;
+    --lvl2: #E8CB4F;
+    --lvl3: #E8A15C;
+    --lvl4: #E37167;
   }
   html[data-fontsize="sm"]{ --qscale: 0.82; }
   html[data-fontsize="md"]{ --qscale: 1; }
@@ -220,89 +228,67 @@
   }
   body.mask-ahead .w.future:hover{ opacity:0.6; }
 
-  /* -------- علامات الخطأ والملاحظة على الكلمة/الآية -------- */
-  .w.word-err{
-    text-decoration: underline wavy var(--danger);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 4px;
-  }
-  .w.word-note::after{
-    content: "•";
-    color: var(--gold);
-    font-weight:900;
-    font-size:1.3em;
-    line-height:0;
-    position:relative;
-    top:-0.35em;
-    margin-inline-start:1px;
-  }
-  .ayah-block.ayah-err{
-    outline: 1.5px dashed var(--danger);
-    outline-offset: 2px;
-    border-radius:8px;
-  }
+  /* -------- درجات خطأ الكلمة (تبدأ أخضر وتميل للأحمر كل ما تتكرر) -------- */
+  .w.lvl-1{ text-decoration: underline wavy var(--lvl1); text-decoration-thickness:2px; text-underline-offset:4px; }
+  .w.lvl-2{ text-decoration: underline wavy var(--lvl2); text-decoration-thickness:2.5px; text-underline-offset:4px; }
+  .w.lvl-3{ text-decoration: underline wavy var(--lvl3); text-decoration-thickness:3px; text-underline-offset:4px; }
+  .w.lvl-4{ text-decoration: underline wavy var(--lvl4); text-decoration-thickness:3px; text-underline-offset:4px; background: rgba(181,66,58,0.12); border-radius:4px; }
+
+  /* -------- ملاحظة على آية -------- */
   .ayah-block.ayah-note .ayah-num-badge{
     border-color: var(--gold);
     color: var(--gold);
+    background: rgba(169,130,46,0.12);
   }
 
-  /* -------- Status bar (الموضع الحالي + زرار خطأ/ملاحظة) -------- */
-  .status-bar{
+  /* -------- مكاني في السورة -------- */
+  .place-bar{
     flex:0 0 auto;
     background: var(--surface);
     border:1px solid var(--line);
     border-radius: var(--radius);
     box-shadow: 0 2px 10px var(--shadow);
-    padding: 10px 14px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:10px;
+    padding: 9px 14px;
+    text-align:center;
   }
-  .status-pos{
+  .place-text{
     font-size:0.84rem;
     color: var(--ink-soft);
     font-weight:600;
+    margin-bottom:6px;
   }
-  .flag-btn{
-    flex:0 0 auto;
+  .place-progress{
+    height:5px;
+    border-radius:99px;
+    background: var(--bg-deep);
+    overflow:hidden;
+  }
+  .place-progress-fill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    border-radius:99px;
+    transition: width .25s;
+  }
+
+  /* -------- أزرار الوسط (تسجيل خطأ / ملاحظة) -------- */
+  .mid-btn{
+    flex:0 0 56px;
+    border:none;
+    border-radius:14px;
+    cursor:pointer;
+    font-size:1.15rem;
     background: var(--surface-soft);
     border:1.5px solid var(--line);
-    border-radius:12px;
-    width:42px;height:42px;
-    font-size:1.05rem;
-    cursor:pointer;
   }
-  .flag-btn:active{ background: var(--accent-soft); }
-
-  /* -------- لوحة الخطأ/الملاحظة -------- */
-  .note-pos{
-    text-align:center;
-    font-size:0.8rem;
-    color: var(--ink-soft);
-    margin-bottom:10px;
-  }
-  .note-check{
-    display:flex; align-items:center; gap:8px;
-    font-size:0.86rem;
-    margin-bottom:10px;
-    cursor:pointer;
-  }
-  .note-check input{ width:18px; height:18px; }
-  textarea#noteText{
-    width:100%;
-    padding:10px;
-    border-radius:10px;
-    border:1px solid var(--line);
-    background: var(--surface-soft);
-    color: var(--ink);
-    font-family:inherit;
-    font-size:0.88rem;
-    resize:vertical;
-    margin-bottom:10px;
-  }
-  .note-card .btn-row{ flex-wrap:wrap; }
-  .note-card .btn-row .btn-danger{ background: var(--danger) !important; color:#fff; border-color: var(--danger); }
+  .mid-btn:active{ transform: scale(0.93); }
+  .nav-row.ayah-row .mid-btn{ min-height:48px; }
+  .nav-row.word-row .mid-btn{ min-height:64px; }
+  .mid-btn.note-btn.has-note{ background: rgba(169,130,46,0.18); border-color: var(--gold); }
+  .mid-btn.err-btn.lvl-1{ background: color-mix(in srgb, var(--lvl1) 30%, var(--surface-soft)); border-color: var(--lvl1); }
+  .mid-btn.err-btn.lvl-2{ background: color-mix(in srgb, var(--lvl2) 35%, var(--surface-soft)); border-color: var(--lvl2); }
+  .mid-btn.err-btn.lvl-3{ background: color-mix(in srgb, var(--lvl3) 40%, var(--surface-soft)); border-color: var(--lvl3); }
+  .mid-btn.err-btn.lvl-4{ background: color-mix(in srgb, var(--lvl4) 45%, var(--surface-soft)); border-color: var(--lvl4); }
 
   /* -------- Nav controls -------- */
   nav.nav-controls{
@@ -402,42 +388,48 @@
   </div>
 </header>
 
-<div class="jump-bar">
-  <select id="jumpSurah"></select>
-  <select id="jumpAyah"></select>
-  <button onclick="window.doJump()">اذهب</button>
-</div>
-
 <main class="container">
   <div class="reading-pane" id="readingPane">
     <div class="surah-heading" id="surahHeading">—</div>
     <div class="ayahs-flow" id="ayahsFlow"></div>
   </div>
 
-  <div class="status-bar">
-    <div class="status-pos" id="positionIndicator">—</div>
-    <button class="flag-btn" id="btnFlag" onclick="window.openNoteOverlay()" title="خطأ / ملاحظة على الموضع الحالي">🚩</button>
+  <div class="place-bar">
+    <div class="place-text" id="positionIndicator">—</div>
+    <div class="place-progress"><div class="place-progress-fill" id="placeProgressFill"></div></div>
   </div>
 </main>
 
 <nav class="nav-controls">
   <div class="nav-row ayah-row">
-    <button class="nav-btn" id="btnNextAyah" onclick="window.goNextAyah()">
-      <span class="lbl">الآية التالية</span><span class="sub">‹‹ ينتقل لبداية الآية</span>
-    </button>
     <button class="nav-btn" id="btnPrevAyah" onclick="window.goPrevAyah()">
       <span class="lbl">الآية السابقة</span><span class="sub">ينتقل لبداية الآية ››</span>
     </button>
+    <button class="mid-btn note-btn" id="btnAyahNote" onclick="window.markAyahNote()" title="ملاحظة على الآية الحالية">
+      📝
+    </button>
+    <button class="nav-btn" id="btnNextAyah" onclick="window.goNextAyah()">
+      <span class="lbl">الآية التالية</span><span class="sub">‹‹ ينتقل لبداية الآية</span>
+    </button>
   </div>
   <div class="nav-row word-row">
-    <button class="nav-btn" id="btnNextWord" onclick="window.goNextWord()">
-      <span class="lbl">الكلمة التالية</span><span class="sub">‹</span>
-    </button>
     <button class="nav-btn" id="btnPrevWord" onclick="window.goPrevWord()">
       <span class="lbl">الكلمة السابقة</span><span class="sub">›</span>
     </button>
+    <button class="mid-btn err-btn" id="btnWordErr" onclick="window.markWordError()" title="تسجيل خطأ على الكلمة الحالية">
+      ⚠️
+    </button>
+    <button class="nav-btn" id="btnNextWord" onclick="window.goNextWord()">
+      <span class="lbl">الكلمة التالية</span><span class="sub">‹</span>
+    </button>
   </div>
 </nav>
+
+<div class="jump-bar">
+  <select id="jumpSurah"></select>
+  <select id="jumpAyah"></select>
+  <button onclick="window.doJump()">اذهب</button>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -456,24 +448,6 @@
       <button class="btn-outline" onclick="window.closeAuth()">إغلاق</button>
     </div>
     <div class="user-line" id="userLine"></div>
-  </div>
-</div>
-
-<div class="overlay" id="noteOverlay">
-  <div class="auth-card note-card">
-    <h3>🚩 خطأ / ملاحظة</h3>
-    <div class="note-pos" id="notePosLabel">—</div>
-    <div class="auth-tabs">
-      <button id="scopeWord" class="active" onclick="window.setNoteScope('word')">على الكلمة</button>
-      <button id="scopeAyah" onclick="window.setNoteScope('ayah')">على الآية كاملة</button>
-    </div>
-    <label class="note-check"><input type="checkbox" id="noteErrCheck"> فيه خطأ هنا (يتظلل باللون الأحمر للمراجعة)</label>
-    <textarea id="noteText" rows="3" placeholder="ملاحظة (اختياري)..."></textarea>
-    <div class="btn-row">
-      <button class="btn-primary" onclick="window.saveNote()">حفظ</button>
-      <button class="btn-outline btn-danger" onclick="window.deleteNote()">حذف</button>
-      <button class="btn-outline" onclick="window.closeNoteOverlay()">إغلاق</button>
-    </div>
   </div>
 </div>
 
