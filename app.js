@@ -146,9 +146,13 @@ function loadLocal(){
 function saveLocalPos(){ store.set(KEY.pos, JSON.stringify(pos)); }
 function saveLocalAnn(){ store.set(KEY.ann, JSON.stringify(annotations)); }
 
+// الكتابة على localStorage عملية متزامنة تُوقف الخيط الرئيسي.
+// تنفيذها مع كل ضغطة كان يضاعف تكلفة التنقّل السريع، فأجّلناها.
+let localPosTimer = null;
 function persistPos(){
   pos.updatedAt = Date.now();
-  saveLocalPos();
+  clearTimeout(localPosTimer);
+  localPosTimer = setTimeout(saveLocalPos, 250);
   clearTimeout(posTimer);
   posTimer = setTimeout(() => push("position"), 800);
 }
@@ -377,21 +381,46 @@ function markWordError(){
    رغم أنها صارت "قادمة". الآن: تحديث موضعي للخطوة الواحدة،
    وفحص كامل لأي قفزة أكبر.
 ------------------------------------------------------------------ */
-function markFuture(el){
-  const a = +el.dataset.ayah, w = +el.dataset.w;
-  el.classList.toggle("future", a > pos.ayah || (a === pos.ayah && w > pos.w));
-}
-function maskAll(){ wordElByKey.forEach(markFuture); }
+// الآيات التالية كاملةً تُعتَّم بكلاس على الآية نفسها (٢٨٦ عنصرًا في
+// أكبر سورة)، ولا نعلّم كلمةً كلمة إلا داخل الآية الحالية وحدها.
+// النسخة السابقة كانت تمرّ على ٦١١٧ كلمة في كل ضغطة تنقّل.
+let maskedAyah = null, maskedW = 0;
+
 function updateMask(prev){
-  const same = prev && prev.surah === pos.surah;
-  const step = same ? Math.abs(pos.ayah - prev.ayah) : Infinity;
-  if(step <= 1){
-    new Set([pos.ayah, prev.ayah]).forEach(a =>
-      (wordElsByAyah.get(a) || []).forEach(markFuture));
-  } else {
-    maskAll();
+  const sameSurah = prev && prev.surah === pos.surah;
+
+  // مستوى الآية: نبدّل فقط الآيات الواقعة بين الموضع السابق والجديد.
+  // الخطوة العادية للأمام تلمس آية واحدة، لا الـ ٢٨٦ كلها.
+  if(!sameSurah || maskedAyah === null){
+    ayahElByNum.forEach((el, num) => el.classList.toggle("fut", num > pos.ayah));
+  } else if(maskedAyah !== pos.ayah){
+    const lo = Math.min(maskedAyah, pos.ayah), hi = Math.max(maskedAyah, pos.ayah);
+    for(let a = lo; a <= hi; a++){
+      const el = ayahElByNum.get(a);
+      if(el) el.classList.toggle("fut", a > pos.ayah);
+    }
   }
+
+  // مستوى الكلمة: لا نمسح علامات الآية السابقة إطلاقًا.
+  // قاعدة التعتيم مقصورة في CSS على الآية الحالية، فالعلامات
+  // المتبقّية على غيرها لا أثر لها، ومسحها كان يكلّف آلاف اللمسات.
+  const cur = wordElsByAyah.get(pos.ayah);
+  if(cur){
+    if(sameSurah && maskedAyah === pos.ayah){
+      // نفس الآية: الكلمات التي غيّرت حالتها هي ما بين الموضعين فقط
+      const lo = Math.min(maskedW, pos.w), hi = Math.max(maskedW, pos.w);
+      for(let i = lo; i <= hi && i < cur.length; i++)
+        cur[i].classList.toggle("future", i > pos.w);
+    } else {
+      for(const e of cur) e.classList.toggle("future", +e.dataset.w > pos.w);
+    }
+  }
+
+  maskedAyah = pos.ayah;
+  maskedW = pos.w;
 }
+
+function maskAll(){ maskedAyah = null; updateMask(null); }
 
 /* ------------------------------------------------------------------
    التظليل وتحديث الواجهة
@@ -489,7 +518,24 @@ function jumpTo(surah, ayah, w){
   pos.surah = surah; pos.ayah = ayah; pos.w = w || 0;
   after(prev);
 }
-function after(prev){ refresh(true, prev); persistPos(); buzz(); }
+// دمج الضغطات السريعة: الضغط المتكرّر بسرعة كان يكدّس عملية تحديث
+// وسكرول ناعم لكل ضغطة فيتجمّد التطبيق. الآن كل الضغطات داخل إطار
+// العرض الواحد تُنفَّذ مرة واحدة، ونحتفظ بأقدم موضع لحساب مدى الإخفاء.
+let coalescedPrev = null, frameQueued = false;
+function after(prev){
+  if(coalescedPrev === null) coalescedPrev = prev;
+  buzz();
+  persistPos();
+  if(frameQueued) return;
+  // العلم يُرفع قبل الاستدعاء لا بعده: لو نفّذ المتصفح الدالة فورًا
+  // لظلّ الحارس مرفوعًا إلى الأبد وتوقّف التحديث تمامًا.
+  frameQueued = true;
+  requestAnimationFrame(() => {
+    frameQueued = false;
+    const p = coalescedPrev; coalescedPrev = null;
+    refresh(true, p);
+  });
+}
 
 /* ------------------------------------------------------------------
    التفضيلات
@@ -808,7 +854,8 @@ function wire(){
   });
 
   $("btnLocator").onclick = openJump;
-  $("btnPanel").onclick = () => { renderAccount(); openPanel("panelSettings"); };
+  $("btnPanel").onclick = () => { renderAccount(); askStatus(); openPanel("panelSettings"); };
+  $("btnDownload").onclick = startDownload;
   $("scrim").onclick = closePanel;
   document.querySelectorAll("[data-close]").forEach(b => b.onclick = closePanel);
 
@@ -870,6 +917,7 @@ function wire(){
 
   document.addEventListener("visibilitychange", () => {
     if(document.visibilityState === "hidden"){
+      clearTimeout(localPosTimer);
       saveLocalPos(); saveLocalAnn();
       if(currentUser && navigator.onLine){
         clearTimeout(posTimer); clearTimeout(annTimer);
@@ -882,12 +930,108 @@ function wire(){
 /* ------------------------------------------------------------------
    العمل بدون إنترنت
 ------------------------------------------------------------------ */
+let swActive = null, installPrompt = null, downloading = false;
+
 function initServiceWorker(){
-  if(!("serviceWorker" in navigator)) return;
+  if(!("serviceWorker" in navigator)){
+    setDlState("متصفحك لا يدعم الحفظ على الجهاز", "جرّب من متصفح آخر مثل كروم أو سفاري.", 0);
+    $("btnDownload").disabled = true;
+    return;
+  }
+  navigator.serviceWorker.addEventListener("message", onSwMessage);
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js")
-      .catch(err => console.warn("تعذّر تسجيل خدمة العمل بدون إنترنت:", err));
+      .then(() => navigator.serviceWorker.ready)
+      .then(reg => { swActive = reg.active || navigator.serviceWorker.controller; askStatus(); })
+      .catch(err => {
+        console.warn("تعذّر تسجيل خدمة العمل بدون إنترنت:", err);
+        setDlState("تعذّر تفعيل الحفظ على الجهاز",
+                   "يحتاج التطبيق أن يُفتح عبر https. جرّب إعادة تحميل الصفحة.", 0);
+      });
   });
+}
+
+function askStatus(){
+  const t = swActive || navigator.serviceWorker.controller;
+  if(t) t.postMessage({ type: "STATUS" });
+}
+
+function onSwMessage(e){
+  const d = e.data || {};
+  if(d.type === "STATUS_RESULT"){
+    const pct = d.total ? Math.round(d.have / d.total * 100) : 0;
+    if(d.have >= d.total){
+      setDlState("جاهز للعمل بدون إنترنت",
+                 "المصحف والخط وكل ملفات التطبيق محفوظة على جهازك.", 100);
+      $("btnDownload").textContent = "إعادة التحميل";
+    } else if(d.have > 0){
+      setDlState("محفوظ جزئيًا",
+                 `${arDigits(d.have)} من ${arDigits(d.total)} ملفات. اضغط التحميل لإكمالها.`, pct);
+    } else {
+      setDlState("غير محفوظ بعد",
+                 "اضغط «تحميل على الجهاز» ليعمل التطبيق بلا اتصال.", 0);
+    }
+  }
+  else if(d.type === "PRECACHE_PROGRESS"){
+    const pct = Math.round(d.done / d.total * 100);
+    setDlState("جارٍ التحميل…", `${arDigits(d.done)} من ${arDigits(d.total)} ملفات`, pct);
+  }
+  else if(d.type === "PRECACHE_DONE"){
+    downloading = false;
+    $("btnDownload").disabled = false;
+    if(d.failed){
+      setDlState("اكتمل التحميل جزئيًا",
+                 `تعذّر تحميل ${arDigits(d.failed)} ملف. تأكد من الاتصال وأعد المحاولة.`, 0);
+      toast("تعذّر تحميل بعض الملفات — أعد المحاولة", true);
+    } else {
+      toast("جاهز للعمل بدون إنترنت");
+    }
+    askStatus();
+  }
+}
+
+function setDlState(title, hint, pct){
+  $("dlState").textContent = title;
+  $("dlHint").textContent = hint;
+  $("dlFill").style.width = pct + "%";
+}
+
+function startDownload(){
+  if(downloading) return;
+  const t = swActive || navigator.serviceWorker.controller;
+  if(!t){
+    toast("خدمة الحفظ لم تجهز بعد — أعد تحميل الصفحة", true);
+    return;
+  }
+  if(!navigator.onLine){
+    toast("تحتاج اتصالًا بالإنترنت مرة واحدة لتحميل المصحف", true);
+    return;
+  }
+  downloading = true;
+  $("btnDownload").disabled = true;
+  setDlState("جارٍ التحميل…", "لا تغلق الصفحة", 2);
+  t.postMessage({ type: "PRECACHE" });
+}
+
+// زر التثبيت على الشاشة الرئيسية — يظهر فقط حين يتيحه المتصفح
+function initInstall(){
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    $("btnInstall").hidden = false;
+  });
+  window.addEventListener("appinstalled", () => {
+    installPrompt = null;
+    $("btnInstall").hidden = true;
+    toast("تم تثبيت التطبيق");
+  });
+  $("btnInstall").onclick = async () => {
+    if(!installPrompt) return;
+    installPrompt.prompt();
+    try{ await installPrompt.userChoice; }catch(e){}
+    installPrompt = null;
+    $("btnInstall").hidden = true;
+  };
 }
 
 /* ------------------------------------------------------------------
@@ -901,4 +1045,5 @@ render(pos.surah);
 refresh(false);
 renderAccount();
 initServiceWorker();
+initInstall();
 initFirebase();

@@ -2,7 +2,7 @@
    مصحف التنقل — خدمة العمل بدون إنترنت
    غيّر رقم VERSION عند أي تعديل على الملفات ليأخذ المستخدمون النسخة الجديدة.
    ============================================================ */
-const VERSION   = "v4";
+const VERSION   = "v5";
 const SHELL     = `mushaf-shell-${VERSION}`;
 const RUNTIME   = `mushaf-runtime-${VERSION}`;
 
@@ -96,4 +96,37 @@ function staleWhileRevalidate(req){
       return hit || net;
     })
   );
+}
+
+
+/* ============================================================
+   رسائل من الصفحة: تحميل يدوي وفحص الجاهزية
+   ============================================================ */
+self.addEventListener("message", (e) => {
+  const d = e.data || {};
+  if(d.type === "PRECACHE")      e.waitUntil(precacheAll(e.source));
+  else if(d.type === "STATUS")   e.waitUntil(reportStatus(e.source));
+});
+
+async function precacheAll(client){
+  const c = await caches.open(SHELL);
+  let done = 0, failed = 0;
+  for(const f of SHELL_FILES){
+    try{
+      // cache:"reload" يتخطّى كاش المتصفح ليضمن نسخة كاملة وحديثة
+      await c.add(new Request(f, { cache: "reload" }));
+    }catch(err){ failed++; }
+    done++;
+    if(client) client.postMessage({ type:"PRECACHE_PROGRESS", done, total: SHELL_FILES.length });
+  }
+  if(client) client.postMessage({ type:"PRECACHE_DONE", failed });
+}
+
+async function reportStatus(client){
+  const c = await caches.open(SHELL);
+  let have = 0;
+  for(const f of SHELL_FILES){
+    if(await c.match(f, { ignoreSearch:true })) have++;
+  }
+  if(client) client.postMessage({ type:"STATUS_RESULT", have, total: SHELL_FILES.length });
 }

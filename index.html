@@ -196,12 +196,15 @@ html[data-theme="dark"] .cartouche{ color: var(--gold); }
   text-align: justify; text-align-last: center;
 }
 .ayah{ display:inline; }
+.ayat{ contain: layout style; }
 .ayah.is-current .w:not(.future){ background: var(--hl-ayah); }
 .ayah.has-note .ayah-no{
   border-color: var(--mark); color: var(--mark);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--mark) 18%, transparent);
 }
-.w{ cursor:pointer; border-radius:4px; padding:1px 2px 3px; transition: background .1s linear; }
+/* بلا transition هنا: الانتقالات على آلاف الكلمات كانت تُشغّل
+   آلاف الحركات دفعة واحدة مع كل ضغطة تنقّل. */
+.w{ cursor:pointer; border-radius:4px; padding:1px 2px 3px; }
 @media (hover:hover){ .w:hover{ background: var(--seal-tint); } }
 /* درجات الخطأ: أخضر ← أصفر ← برتقالي ← أحمر */
 .w.lvl-1{ background: var(--lvl1); color: var(--lvl1-ink); }
@@ -218,8 +221,20 @@ html[data-theme="dark"] .cartouche{ color: var(--gold); }
   color: var(--gold); font-family:inherit; font-weight:600;
   background: var(--sheet);
 }
-body.mask-on .w.future{ filter: blur(6px); opacity:.34; user-select:none; }
-body.mask-on .w.future:active{ filter:none; opacity:1; }
+/* الإخفاء بظل نصّي بدل filter: blur.
+   filter ينشئ طبقة عرض مستقلة لكل عنصر، وفي البقرة وحدها ٦١١٧ كلمة،
+   فكان المتصفح يبني آلاف الطبقات ويتقطّع التنقّل ويتجمّد مع الضغط السريع.
+   text-shadow يعطي نفس الأثر البصري بتكلفة رسم أقل بكثير.
+   كما أن التعتيم صار على مستوى الآية (٢٨٦ عنصرًا) لا الكلمة (٦١١٧). */
+body.mask-on .ayah.fut .w,
+body.mask-on .ayah.is-current .w.future{
+  color: transparent;
+  text-shadow: 0 0 9px var(--ink);
+  opacity:.45;
+  user-select:none;
+}
+body.mask-on .ayah.fut .w:active,
+body.mask-on .ayah.is-current .w.future:active{ color: inherit; text-shadow:none; opacity:1; }
 .pane-empty{ text-align:center; color:var(--ink-2); padding:40px 0; }
 
 /* ================= أزرار التنقل ================= */
@@ -607,6 +622,17 @@ html[data-theme="dark"] .tabs button[aria-selected="true"]{ color: var(--page); 
     <span class="l1">هفوة</span><span class="l2">متكرر</span><span class="l3">صعب</span><span class="l4">يحتاج تركيز</span>
   </div>
   <p class="note" id="annStats"></p>
+
+  <h2 style="margin-top:20px">العمل بدون إنترنت</h2>
+  <div class="acct">
+    <div class="who" id="dlState">جارٍ الفحص…</div>
+    <div class="when" id="dlHint">يُحفظ المصحف كاملًا وخطّه على جهازك، فيفتح التطبيق في المواصلات وفي المسجد بلا اتصال.</div>
+    <div class="track" style="margin-top:10px"><i id="dlFill"></i></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-main" id="btnDownload">تحميل على الجهاز</button>
+    <button class="btn btn-line" id="btnInstall" hidden>إضافة للشاشة الرئيسية</button>
+  </div>
 
   <h2 style="margin-top:20px">المزامنة بين أجهزتك</h2>
   <div id="acctBox"></div>
