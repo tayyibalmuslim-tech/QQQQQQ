@@ -2,7 +2,7 @@
    مصحف التنقل — خدمة العمل بدون إنترنت
    غيّر رقم VERSION عند أي تعديل على الملفات ليأخذ المستخدمون النسخة الجديدة.
    ============================================================ */
-const VERSION   = "v5";
+const VERSION   = "v6";
 const SHELL     = `mushaf-shell-${VERSION}`;
 const RUNTIME   = `mushaf-runtime-${VERSION}`;
 

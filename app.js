@@ -60,6 +60,12 @@ let wordsByAyah   = new Map();  // ayah     -> [strings]
 
 const LVL = ["lvl-1","lvl-2","lvl-3","lvl-4"];
 
+// نافذة العرض: نرسم الآيات المحيطة بالموضع فقط.
+// رسم السورة كاملة كان يضع ٦١١٧ عنصرًا في الصفحة في البقرة وحدها،
+// فيعيد المتصفح حساب تخطيط نص مضبوط لآلاف العناصر مع كل تغيير.
+const WIN_BACK = 10, WIN_FWD = 22, WIN_EDGE = 8, WIN_STEP = 6, WIN_GROW = 25;
+let winFrom = 1, winTo = 1;
+
 // بدايات الأجزاء الثلاثين [سورة، آية]
 const JUZ_STARTS = [
   [1,1],[2,142],[2,253],[3,93],[4,24],[4,148],[5,82],[6,111],[7,88],[8,41],
@@ -68,6 +74,18 @@ const JUZ_STARTS = [
 ];
 
 const $ = (id) => document.getElementById(id);
+
+// مراجع العناصر الساخنة تُخزَّن مرة واحدة: البحث عنها بالمعرّف
+// كان يتكرّر خمس عشرة مرة في كل ضغطة تنقّل.
+const EL = {};
+function cacheEls(){
+  for(const id of ["pane","ayat","basmala","surahBand","locSurah","locMeta",
+                   "trackFill","live","btnWordErr","btnAyahNote",
+                   "btnPrevWord","btnPrevAyah","btnNextAyah"]) EL[id] = $(id);
+}
+
+// آخر ما كُتب فعلاً، حتى لا نعيد كتابة النص نفسه كل ضغطة
+const shown = { loc:"", meta:"", pct:"", live:"", errLvl:-1, note:null };
 
 /* ------------------------------------------------------------------
    تخزين محلي آمن
@@ -217,7 +235,7 @@ function pullAll(uid){
     if(rAt > lAt){
       pos = { surah:r.surah, ayah:r.ayah, w:r.w||0, updatedAt:rAt };
       saveLocalPos();
-      render(pos.surah);
+      render(pos.surah, pos.ayah);
       refresh(true);
       toast("استُرجع موضعك من جهازك الآخر");
     } else if(lAt > rAt){
@@ -237,6 +255,7 @@ function pullAll(uid){
     annotations = mergeAnnotations(annotations, remote);
     saveLocalAnn();
     applyMarkers();
+    shown.errLvl = -1; shown.note = null;
     updateMidButtons();
     const after = countAnn(annotations);
     if(after.words > before.words || after.notes > before.notes){
@@ -265,62 +284,188 @@ function explainDbError(err){
    مستمع نقر واحد بالتفويض على الحاوية بدل دالة لكل كلمة —
    في البقرة وحدها هذا يوفّر أكثر من ٦٠٠٠ دالة في الذاكرة.
 ------------------------------------------------------------------ */
-function render(surahNum){
+function makeAyah(v, surahNum){
+  const ayahEl = document.createElement("span");
+  ayahEl.className = "ayah";
+  ayahEl.dataset.ayah = v.number;
+  ayahElByNum.set(v.number, ayahEl);
+
+  const words = tokenize(v.text);
+  wordsByAyah.set(v.number, words);
+  const els = [];
+  words.forEach((word, i) => {
+    const w = document.createElement("span");
+    w.className = "w";
+    w.textContent = word;
+    w.dataset.ayah = v.number;
+    w.dataset.w = i;
+    ayahEl.appendChild(w);
+    ayahEl.appendChild(document.createTextNode(" "));
+    wordElByKey.set(v.number + ":" + i, w);
+    els.push(w);
+  });
+  wordElsByAyah.set(v.number, els);
+
+  // نعلّم الآية وقت إنشائها بدل إعادة فحص كل العلامات المسجّلة
+  // في كل انزلاق — عددها ينمو مع الاستعمال وكان سيبطئ التسميع.
+  const base = surahNum + ":" + v.number;
+  for(let i = 0; i < els.length; i++){
+    const lvl = annotations.wordLevel[base + ":" + i];
+    if(lvl >= 1 && lvl <= 4) els[i].classList.add("lvl-" + lvl);
+  }
+  if(annotations.ayahNote[base]) ayahEl.classList.add("has-note");
+
+  const no = document.createElement("span");
+  no.className = "ayah-no";
+  no.textContent = arDigits(v.number);
+  ayahEl.appendChild(no);
+  ayahEl.appendChild(document.createTextNode(" "));
+  return ayahEl;
+}
+
+function dropAyah(n){
+  const el = ayahElByNum.get(n);
+  if(el && el.parentNode) el.parentNode.removeChild(el);
+  ayahElByNum.delete(n);
+  const words = wordsByAyah.get(n);
+  if(words) for(let i = 0; i < words.length; i++) wordElByKey.delete(n + ":" + i);
+  wordElsByAyah.delete(n);
+  wordsByAyah.delete(n);
+}
+
+function moreButton(dir){
+  const d = document.createElement("div");
+  d.className = "more";
+  d.dataset.edge = dir;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.dataset.more = dir;
+  d.appendChild(b);
+  return d;
+}
+
+let edgeBack = null, edgeFwd = null;
+function updateEdges(total){
+  const flow = EL.ayat;
+  let back = edgeBack, fwd = edgeFwd;
+
+  if(winFrom > 1){
+    if(!back || !back.parentNode){ back = edgeBack = moreButton("back"); flow.insertBefore(back, flow.firstChild); }
+    back.firstChild.textContent = `اعرض ما قبله · ${arDigits(winFrom - 1)} آية`;
+  } else if(back){ back.remove(); edgeBack = null; }
+
+  if(winTo < total){
+    if(!fwd || !fwd.parentNode){ fwd = edgeFwd = moreButton("fwd"); flow.appendChild(fwd); }
+    fwd.firstChild.textContent = `اعرض ما بعده · ${arDigits(total - winTo)} آية`;
+  } else if(fwd){ fwd.remove(); edgeFwd = null; }
+}
+
+function buildWindow(surahNum, from, to){
   const verses = QURAN_VERSES_DATA[String(surahNum)];
-  const flow = $("ayat");
+  const flow = EL.ayat;
   flow.textContent = "";
+  edgeBack = null; edgeFwd = null;
   wordElByKey = new Map(); ayahElByNum = new Map();
   wordElsByAyah = new Map(); wordsByAyah = new Map();
   curWordEl = null; curAyahEl = null;
+  maskedAyah = null;
 
   $("surahBand").textContent = "سورة " + surahName(surahNum);
 
-  // البسملة عنوانٌ لكل السور عدا الفاتحة (هي آية فيها) والتوبة (بلا بسملة)
-  const showBasmala = (surahNum !== 1 && surahNum !== 9);
-  $("basmala").hidden = !showBasmala;
-  if(showBasmala) $("basmala").textContent = basmalaText();
-
   if(!verses){
     flow.innerHTML = '<p class="pane-empty">نص هذه السورة غير متاح</p>';
-    renderedSurah = surahNum;
+    renderedSurah = surahNum; winFrom = 1; winTo = 1;
+    $("basmala").hidden = true;
     return;
   }
+  renderedSurah = surahNum;
+  const total = verses.length;
+  winFrom = Math.max(1, from); winTo = Math.min(total, to);
 
   const frag = document.createDocumentFragment();
-  for(const v of verses){
-    const ayahEl = document.createElement("span");
-    ayahEl.className = "ayah";
-    ayahEl.dataset.ayah = v.number;
-    ayahElByNum.set(v.number, ayahEl);
-
-    const words = tokenize(v.text);
-    wordsByAyah.set(v.number, words);
-    const els = [];
-
-    words.forEach((word, i) => {
-      const w = document.createElement("span");
-      w.className = "w";
-      w.textContent = word;
-      w.dataset.ayah = v.number;
-      w.dataset.w = i;
-      ayahEl.appendChild(w);
-      ayahEl.appendChild(document.createTextNode(" "));
-      wordElByKey.set(v.number + ":" + i, w);
-      els.push(w);
-    });
-    wordElsByAyah.set(v.number, els);
-
-    const no = document.createElement("span");
-    no.className = "ayah-no";
-    no.textContent = arDigits(v.number);
-    ayahEl.appendChild(no);
-    ayahEl.appendChild(document.createTextNode(" "));
-    frag.appendChild(ayahEl);
-  }
+  for(let n = winFrom; n <= winTo; n++) frag.appendChild(makeAyah(verses[n-1], surahNum));
   flow.appendChild(frag);
-  renderedSurah = surahNum;
+
+  updateEdges(total);
+  updateBasmala();
   maskAll();
-  applyMarkers();
+}
+
+// البسملة عنوانٌ لكل السور عدا الفاتحة (هي آية فيها) والتوبة (بلا بسملة)،
+// وتظهر فقط حين تكون بداية السورة داخل النافذة المعروضة
+function updateBasmala(){
+  const show = renderedSurah !== 1 && renderedSurah !== 9 && winFrom === 1;
+  $("basmala").hidden = !show;
+  if(show) $("basmala").textContent = basmalaText();
+}
+
+/* تنزلق النافذة بإضافة الناقص وحذف الخارج، بدل إعادة بنائها كاملة.
+   إعادة البناء كل بضع آيات كانت تُحدث تهتيتة محسوسة أثناء التسميع.
+   نثبّت الآية الحالية بصريًا حتى لا يقفز النص تحت عين القارئ. */
+function slideWindow(from, to){
+  const verses = QURAN_VERSES_DATA[String(renderedSurah)];
+  if(!verses) return;
+  const total = verses.length;
+  from = Math.max(1, from); to = Math.min(total, to);
+  if(from === winFrom && to === winTo) return;
+
+  const pane = EL.pane, flow = EL.ayat;
+  const anchor = ayahElByNum.get(pos.ayah);
+  const before = anchor ? anchor.offsetTop : null;
+
+  for(let n = winFrom; n < from; n++) dropAyah(n);
+  for(let n = winTo;  n > to;   n--) dropAyah(n);
+
+  if(to > winTo){
+    const f = document.createDocumentFragment();
+    for(let n = Math.max(winTo + 1, from); n <= to; n++) f.appendChild(makeAyah(verses[n-1], renderedSurah));
+    const fwd = edgeFwd;
+    if(fwd && fwd.parentNode) flow.insertBefore(f, fwd); else flow.appendChild(f);
+  }
+  if(from < winFrom){
+    const f = document.createDocumentFragment();
+    const stop = Math.min(winFrom - 1, to);
+    for(let n = from; n <= stop; n++) f.appendChild(makeAyah(verses[n-1], renderedSurah));
+    const first = ayahElByNum.get(Math.max(winFrom, from > winFrom ? from : winFrom));
+    const ref = flow.querySelector(".ayah");
+    if(ref) flow.insertBefore(f, ref); else flow.appendChild(f);
+  }
+
+  winFrom = from; winTo = to;
+  updateEdges(total);
+  updateBasmala();
+  maskAll();
+
+  const nowEl = ayahElByNum.get(pos.ayah);
+  if(before !== null && nowEl && typeof nowEl.offsetTop === "number"){
+    pane.scrollTop += (nowEl.offsetTop - before);
+  }
+}
+
+function render(surahNum, center){
+  const total = surahVerses(surahNum) || 1;
+  const c = Math.min(Math.max(center || 1, 1), total);
+  buildWindow(surahNum, c - WIN_BACK, c + WIN_FWD);
+}
+
+// يعيد true إن تغيّرت السورة (فيفقد الموضع السابق معناه لحساب الإخفاء)
+function ensureWindow(){
+  if(renderedSurah !== pos.surah){ render(pos.surah, pos.ayah); return true; }
+  const total = surahVerses(pos.surah) || 1;
+  if(pos.ayah < winFrom || pos.ayah > winTo){ render(pos.surah, pos.ayah); return true; }
+  // ننزلق خطوة صغيرة ثابتة بدل قفزة كبيرة: كلفة الانزلاق تتناسب مع
+  // عدد الآيات المضافة، فالقفزة الواحدة كانت تُحدث لحظة ثقل محسوسة.
+  const nearStart = pos.ayah < winFrom + WIN_EDGE && winFrom > 1;
+  const nearEnd   = pos.ayah > winTo - WIN_EDGE && winTo < total;
+  if(nearEnd)        slideWindow(winFrom + WIN_STEP, winTo + WIN_STEP);
+  else if(nearStart) slideWindow(winFrom - WIN_STEP, winTo - WIN_STEP);
+  return false;
+}
+
+function extendWindow(dir){
+  if(dir === "back") slideWindow(winFrom - WIN_GROW, winTo);
+  else               slideWindow(winFrom, winTo + WIN_GROW);
+  refresh(false);
 }
 
 /* ------------------------------------------------------------------
@@ -348,17 +493,22 @@ function applyMarkers(){
 }
 
 function updateMidButtons(){
-  const errBtn = $("btnWordErr");
-  errBtn.classList.remove(...LVL);
-  const lvl = annotations.wordLevel[pos.surah + ":" + pos.ayah + ":" + pos.w];
-  if(lvl >= 1 && lvl <= 4) errBtn.classList.add("lvl-" + lvl);
-  errBtn.setAttribute("aria-label",
-    lvl ? `درجة الخطأ على الكلمة الحالية: ${lvl} من 4` : "تسجيل خطأ على الكلمة الحالية");
-
-  const noteBtn = $("btnAyahNote");
+  const lvl = annotations.wordLevel[pos.surah + ":" + pos.ayah + ":" + pos.w] || 0;
+  if(lvl !== shown.errLvl){
+    const b = EL.btnWordErr;
+    b.classList.remove(...LVL);
+    if(lvl >= 1 && lvl <= 4) b.classList.add("lvl-" + lvl);
+    b.setAttribute("aria-label",
+      lvl ? `درجة الخطأ على الكلمة الحالية: ${lvl} من 4` : "تسجيل خطأ على الكلمة الحالية");
+    shown.errLvl = lvl;
+  }
   const hasNote = !!annotations.ayahNote[pos.surah + ":" + pos.ayah];
-  noteBtn.classList.toggle("has-note", hasNote);
-  noteBtn.setAttribute("aria-label", hasNote ? "تعديل ملاحظة هذه الآية" : "ملاحظة على الآية الحالية");
+  if(hasNote !== shown.note){
+    const n = EL.btnAyahNote;
+    n.classList.toggle("has-note", hasNote);
+    n.setAttribute("aria-label", hasNote ? "تعديل ملاحظة هذه الآية" : "ملاحظة على الآية الحالية");
+    shown.note = hasNote;
+  }
 }
 
 // أخضر ← أصفر ← برتقالي ← أحمر ← يُمسح
@@ -370,6 +520,7 @@ function markWordError(){
   else annotations.wordLevel[key] = next;
   persistAnn();
   applyMarkers();
+  shown.errLvl = -1;
   updateMidButtons();
   buzz();
 }
@@ -426,7 +577,7 @@ function maskAll(){ maskedAyah = null; updateMask(null); }
    التظليل وتحديث الواجهة
 ------------------------------------------------------------------ */
 function scrollIfNeeded(el){
-  const pane = $("pane");
+  const pane = EL.pane;
   const p = pane.getBoundingClientRect();
   const e = el.getBoundingClientRect();
   const pCenter = p.top + p.height / 2;
@@ -439,7 +590,7 @@ function scrollIfNeeded(el){
 }
 
 function refresh(scroll, prev){
-  if(renderedSurah !== pos.surah){ render(pos.surah); prev = null; }
+  if(ensureWindow()) prev = null;
 
   if(curWordEl) curWordEl.classList.remove("is-current");
   updateMask(prev);
@@ -459,17 +610,24 @@ function refresh(scroll, prev){
   const words = wordsByAyah.get(pos.ayah) || tokenize(verseText(pos.surah, pos.ayah) || "");
   const total = surahVerses(pos.surah) || 1;
 
-  $("locSurah").textContent = "سورة " + surahName(pos.surah);
-  $("locMeta").textContent  =
-    `آية ${arDigits(pos.ayah)}/${arDigits(total)} · كلمة ${arDigits(pos.w+1)}/${arDigits(words.length)} · جزء ${arDigits(juzOf(pos.surah,pos.ayah))}`;
-  $("trackFill").style.width = ((pos.ayah / total) * 100).toFixed(1) + "%";
-  $("live").textContent = `${words[pos.w] || ""} — آية ${pos.ayah}، كلمة ${pos.w+1} من ${words.length}`;
+  // لا نكتب في الصفحة إلا ما تغيّر فعلاً
+  const loc = "سورة " + surahName(pos.surah);
+  if(loc !== shown.loc){ EL.locSurah.textContent = loc; shown.loc = loc; }
+
+  const meta = `آية ${arDigits(pos.ayah)}/${arDigits(total)} · كلمة ${arDigits(pos.w+1)}/${arDigits(words.length)} · جزء ${arDigits(juzOf(pos.surah,pos.ayah))}`;
+  if(meta !== shown.meta){ EL.locMeta.textContent = meta; shown.meta = meta; }
+
+  const pct = ((pos.ayah / total) * 100).toFixed(1) + "%";
+  if(pct !== shown.pct){ EL.trackFill.style.width = pct; shown.pct = pct; }
+
+  const live = `${words[pos.w] || ""} — آية ${pos.ayah}، كلمة ${pos.w+1}`;
+  if(live !== shown.live){ EL.live.textContent = live; shown.live = live; }
 
   updateMidButtons();
 
-  $("btnPrevAyah").disabled = (pos.surah === 1 && pos.ayah === 1);
-  $("btnNextAyah").disabled = (pos.surah === 114 && pos.ayah === surahVerses(114));
-  $("btnPrevWord").disabled = (pos.surah === 1 && pos.ayah === 1 && pos.w === 0);
+  EL.btnPrevAyah.disabled = (pos.surah === 1 && pos.ayah === 1);
+  EL.btnNextAyah.disabled = (pos.surah === 114 && pos.ayah === surahVerses(114));
+  EL.btnPrevWord.disabled = (pos.surah === 1 && pos.ayah === 1 && pos.w === 0);
 }
 
 /* ------------------------------------------------------------------
@@ -668,12 +826,12 @@ function saveNote(){
   const val = $("noteText").value.trim();
   if(val) annotations.ayahNote[key] = val;
   else delete annotations.ayahNote[key];
-  persistAnn(); applyMarkers(); updateMidButtons(); closePanel();
+  persistAnn(); applyMarkers(); shown.note = null; updateMidButtons(); closePanel();
   toast(val ? "حُفظت الملاحظة" : "حُذفت الملاحظة");
 }
 function deleteNote(){
   delete annotations.ayahNote[pos.surah + ":" + pos.ayah];
-  persistAnn(); applyMarkers(); updateMidButtons(); closePanel();
+  persistAnn(); applyMarkers(); shown.note = null; updateMidButtons(); closePanel();
   toast("حُذفت الملاحظة");
 }
 
@@ -818,7 +976,7 @@ function toast(msg, bad){
    السحب على نص المصحف
 ------------------------------------------------------------------ */
 function initSwipe(){
-  const pane = $("pane");
+  const pane = EL.pane;
   let x0=0, y0=0, live=false;
   pane.addEventListener("touchstart", (e) => {
     if(!prefs.swipe || e.touches.length !== 1){ live=false; return; }
@@ -848,6 +1006,8 @@ function wire(){
   $("btnDeleteNote").onclick = deleteNote;
 
   $("ayat").addEventListener("click", (e) => {
+    const more = e.target.closest("button[data-more]");
+    if(more){ extendWindow(more.dataset.more); return; }
     const w = e.target.closest(".w");
     if(!w) return;
     jumpTo(pos.surah, +w.dataset.ayah, +w.dataset.w);
@@ -1037,11 +1197,12 @@ function initInstall(){
 /* ------------------------------------------------------------------
    الإقلاع
 ------------------------------------------------------------------ */
+cacheEls();
 loadPrefs();
 loadLocal();
 wire();
 initSwipe();
-render(pos.surah);
+render(pos.surah, pos.ayah);
 refresh(false);
 renderAccount();
 initServiceWorker();
